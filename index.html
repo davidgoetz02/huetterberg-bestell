@@ -387,7 +387,7 @@ tr:last-child td { border-bottom: none; }
         <div class="tabelle-container">
           <table>
             <thead>
-              <tr><th>Lieferwoche</th><th>Gesamt (netto)</th><th>Status</th></tr>
+              <tr><th>Lieferwoche</th><th>Gesamt (netto)</th><th>Status</th><th></th></tr>
             </thead>
             <tbody id="meine-bestellungen-tabelle">
               <tr><td colspan="3" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
@@ -405,7 +405,7 @@ tr:last-child td { border-bottom: none; }
       <span id="warenkorb-anzahl">0 Artikel</span>
       Gesamtsumme: <strong id="warenkorb-summe">€ 0,00</strong>
     </div>
-    <button class="btn" style="background:var(--weiss);color:var(--gruen);font-weight:700;padding:10px 20px;" onclick="bestellungAbsenden()">Jetzt bestellen →</button>
+    <button class="btn" style="background:var(--weiss);color:var(--gruen);font-weight:700;padding:10px 20px;" onclick="zusammenfassungZeigen()">Bestellung prüfen →</button>
   </div>
 </div>
 
@@ -544,6 +544,52 @@ tr:last-child td { border-bottom: none; }
     <div id="preise-liste"></div>
     <div class="modal-fuss">
       <button class="btn btn-grau" onclick="modalSchliessen('preise-modal')">Schließen</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Passwort ändern Modal -->
+<div id="passwort-modal" class="modal-overlay">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-kopf">
+      <h2>Passwort ändern</h2>
+      <button class="modal-schliessen" onclick="modalSchliessen('passwort-modal')">×</button>
+    </div>
+    <div class="feld"><label>Neues Passwort</label><input type="password" id="pw-neu" placeholder="Min. 6 Zeichen" /></div>
+    <div class="feld"><label>Passwort wiederholen</label><input type="password" id="pw-neu2" placeholder="Wiederholen" /></div>
+    <div class="modal-fuss">
+      <button class="btn btn-grau" onclick="modalSchliessen('passwort-modal')">Abbrechen</button>
+      <button class="btn btn-gruen" onclick="passwortAendern()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bestellung Detail Modal -->
+<div id="detail-modal" class="modal-overlay">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-kopf">
+      <h2 id="detail-modal-titel">Bestelldetails</h2>
+      <button class="modal-schliessen" onclick="modalSchliessen('detail-modal')">×</button>
+    </div>
+    <div id="detail-modal-inhalt"></div>
+    <div class="modal-fuss" id="detail-modal-fuss">
+      <button class="btn btn-grau" onclick="modalSchliessen('detail-modal')">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bestellung Zusammenfassung Modal -->
+<div id="zusammenfassung-modal" class="modal-overlay">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-kopf">
+      <h2>Bestellung bestätigen</h2>
+      <button class="modal-schliessen" onclick="modalSchliessen('zusammenfassung-modal')">×</button>
+    </div>
+    <div id="zusammenfassung-inhalt"></div>
+    <div class="modal-fuss">
+      <button class="btn btn-grau" onclick="modalSchliessen('zusammenfassung-modal')">Zurück zum Shop</button>
+      <button class="btn btn-gruen" onclick="bestellungFinalAbsenden()">✓ Jetzt verbindlich bestellen</button>
     </div>
   </div>
 </div>
@@ -1277,8 +1323,16 @@ async function shopLaden() {
 
   container.innerHTML = alleProdukte.map(p => {
     const preis = preisMap[p.id] !== undefined ? preisMap[p.id] : p.basispreis_netto;
+    const emojis = {
+      'Tomaten':'🍅','Zucchini':'🥒','Salat (Lollo Rosso)':'🥬','Gurken':'🥒',
+      'Karotten':'🥕','Kresse':'🌿','Basilikum':'🌿','Radieschen':'🌱',
+      'Paprika (rot)':'🫑','Erdbeeren':'🍓','Spinat':'🥬','Kohlrabi':'🥦',
+      'Äpfel':'🍎','Birnen':'🍐','Zwiebeln':'🧅','Knoblauch':'🧄',
+      'Kartoffeln':'🥔','Mais':'🌽','Brokkoli':'🥦','Blumenkohl':'🤍'
+    };
+    const emoji = p.bildUrl || emojis[p.name] || '🌿';
     return `<div class="produkt-karte">
-      <div class="produkt-bild">🥦</div>
+      <div class="produkt-bild">${emoji}</div>
       <div class="produkt-info">
         <div class="produkt-name">${p.name}</div>
         <div class="produkt-einheit">pro ${p.einheit}</div>
@@ -1357,11 +1411,167 @@ async function meineBestellungenLaden() {
     return;
   }
   tbody.innerHTML = data.map(b => `
-    <tr>
+    <tr style="cursor:pointer" onclick="bestellungDetailZeigen('${b.id}', '${b.status}')">
       <td>${wochenLabel(b.lieferwochen)}</td>
       <td>${euro(b.gesamt_netto)}</td>
       <td><span class="badge ${b.status==='geliefert'?'badge-gruen':b.status==='eingegangen'?'badge-orange':b.status==='bestaetigt'?'badge-blau':'badge-rot'}">${b.status}</span></td>
+      <td style="color:var(--gruen);font-size:12px;">${b.status==='eingegangen'?'✏️ Bearbeitbar':'🔍 Details'}</td>
     </tr>`).join('');
+}
+
+
+// ── PASSWORT ÄNDERN ────────────────────────────────────────────
+async function passwortAendern() {
+  const pw1 = document.getElementById('pw-neu').value;
+  const pw2 = document.getElementById('pw-neu2').value;
+  if (!pw1 || pw1.length < 6) { toast('Passwort muss mind. 6 Zeichen haben.', true); return; }
+  if (pw1 !== pw2) { toast('Passwörter stimmen nicht überein.', true); return; }
+  const { error } = await sb.auth.updateUser({ password: pw1 });
+  if (error) { toast('Fehler: ' + error.message, true); return; }
+  toast('Passwort erfolgreich geändert.');
+  modalSchliessen('passwort-modal');
+  document.getElementById('pw-neu').value = '';
+  document.getElementById('pw-neu2').value = '';
+}
+
+// ── BESTELLUNG ZUSAMMENFASSUNG ─────────────────────────────────
+function zusammenfassungZeigen() {
+  if (!Object.keys(warenkorb).length) { toast('Der Warenkorb ist leer.', true); return; }
+  const gesamt = Object.values(warenkorb).reduce((s, v) => s + v.menge * v.preis, 0);
+  const zeilen = Object.values(warenkorb).map(v => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border)">${v.name}</td>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:center">${v.menge} ${v.einheit}</td>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:right">${euro(v.preis)}</td>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:right;font-weight:700">${euro(v.menge * v.preis)}</td>
+    </tr>`).join('');
+
+  document.getElementById('zusammenfassung-inhalt').innerHTML = `
+    <div style="background:var(--gruen-bg);border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+      <strong style="color:var(--gruen)">Lieferwoche:</strong> ${wochenLabel(aktiveWoche)}<br>
+      <span style="font-size:13px;color:var(--grau)">Deadline: ${datumZeit(aktiveWoche?.bestelldeadline)}</span>
+    </div>
+    <table style="width:100%;font-size:14px;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left;padding:8px 0;border-bottom:2px solid var(--gruen-sehr-hell);color:var(--gruen)">Produkt</th>
+        <th style="text-align:center;padding:8px 0;border-bottom:2px solid var(--gruen-sehr-hell);color:var(--gruen)">Menge</th>
+        <th style="text-align:right;padding:8px 0;border-bottom:2px solid var(--gruen-sehr-hell);color:var(--gruen)">Einzelpreis</th>
+        <th style="text-align:right;padding:8px 0;border-bottom:2px solid var(--gruen-sehr-hell);color:var(--gruen)">Gesamt</th>
+      </tr></thead>
+      <tbody>${zeilen}</tbody>
+    </table>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:12px;border-top:2px solid var(--gruen);">
+      <span style="font-size:15px;color:var(--text-leicht)">Gesamtsumme netto</span>
+      <span style="font-size:22px;font-weight:700;color:var(--gruen)">${euro(gesamt)}</span>
+    </div>
+    <p style="font-size:12px;color:var(--grau);margin-top:8px;">Pauschalierter Betrieb – kein Steuerausweis</p>`;
+  modalSchliessen('zusammenfassung-modal');
+  modalOeffnen('zusammenfassung-modal');
+}
+
+async function bestellungFinalAbsenden() {
+  modalSchliessen('zusammenfassung-modal');
+  await bestellungAbsenden();
+}
+
+// ── BESTELLUNG DETAIL / BEARBEITEN ────────────────────────────
+async function bestellungDetailZeigen(bestellungId, status) {
+  const { data: b } = await sb.from('bestellungen')
+    .select('*, lieferwochen(*), bestellpositionen(*, produkte(name, einheit))')
+    .eq('id', bestellungId).single();
+  if (!b) return;
+
+  const bearbeitbar = status === 'eingegangen';
+  const jetzt = new Date();
+  const deadlineVorbei = b.lieferwochen?.bestelldeadline && new Date(b.lieferwochen.bestelldeadline) < jetzt;
+
+  document.getElementById('detail-modal-titel').textContent =
+    bearbeitbar && !deadlineVorbei ? '✏️ Bestellung bearbeiten' : '🔍 Bestelldetails';
+
+  const zeilen = (b.bestellpositionen || []).map(p => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border)">${p.produkte?.name || '–'}</td>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:center">
+        ${bearbeitbar && !deadlineVorbei
+          ? `<div style="display:flex;align-items:center;justify-content:center;gap:8px;">
+               <button class="menge-btn" onclick="positionMengeAendern('${bestellungId}','${p.id}','${p.produkt_id}',${p.menge},-1,${p.preis_netto})">−</button>
+               <span id="pos-menge-${p.id}" style="font-weight:700;min-width:30px;text-align:center">${p.menge}</span>
+               <button class="menge-btn" onclick="positionMengeAendern('${bestellungId}','${p.id}','${p.produkt_id}',${p.menge},1,${p.preis_netto})">+</button>
+             </div>`
+          : `<strong>${p.menge} ${p.produkte?.einheit || ''}</strong>`}
+      </td>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:right">${euro(p.preis_netto)}</td>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:right;font-weight:700" id="pos-gesamt-${p.id}">${euro(p.gesamt_netto)}</td>
+    </tr>`).join('');
+
+  const gesamt = (b.bestellpositionen || []).reduce((s, p) => s + parseFloat(p.gesamt_netto), 0);
+
+  document.getElementById('detail-modal-inhalt').innerHTML = `
+    <div style="background:var(--gruen-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">
+      <strong>Lieferwoche:</strong> ${wochenLabel(b.lieferwochen)} &nbsp;|&nbsp;
+      <strong>Status:</strong> <span class="badge ${status==='eingegangen'?'badge-orange':status==='bestaetigt'?'badge-blau':'badge-gruen'}">${status}</span>
+      ${deadlineVorbei ? '<br><span style="color:var(--rot);font-size:12px;">⚠️ Deadline abgelaufen – keine Änderungen mehr möglich</span>' : ''}
+    </div>
+    <table style="width:100%;font-size:14px;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Produkt</th>
+        <th style="text-align:center;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Menge</th>
+        <th style="text-align:right;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Preis</th>
+        <th style="text-align:right;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Gesamt</th>
+      </tr></thead>
+      <tbody>${zeilen}</tbody>
+    </table>
+    <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:10px;border-top:2px solid var(--gruen)">
+      <span style="font-weight:600">Gesamtsumme netto</span>
+      <span style="font-size:20px;font-weight:700;color:var(--gruen)" id="detail-gesamt">${euro(gesamt)}</span>
+    </div>`;
+
+  const fuss = document.getElementById('detail-modal-fuss');
+  if (bearbeitbar && !deadlineVorbei) {
+    fuss.innerHTML = `
+      <button class="btn btn-rot" onclick="bestellungStornieren('${bestellungId}')">🗑️ Bestellung stornieren</button>
+      <button class="btn btn-grau" onclick="modalSchliessen('detail-modal')">Schließen</button>`;
+  } else {
+    fuss.innerHTML = `<button class="btn btn-grau" onclick="modalSchliessen('detail-modal')">Schließen</button>`;
+  }
+
+  modalOeffnen('detail-modal');
+}
+
+async function positionMengeAendern(bestellungId, positionId, produktId, aktMenge, delta, preis) {
+  const neueMenge = Math.max(0, parseFloat(aktMenge) + delta);
+  if (neueMenge === 0) {
+    if (!confirm('Position entfernen?')) return;
+    await sb.from('bestellpositionen').delete().eq('id', positionId);
+  } else {
+    await sb.from('bestellpositionen').update({
+      menge: neueMenge,
+      gesamt_netto: neueMenge * preis
+    }).eq('id', positionId);
+    const mengeEl = document.getElementById('pos-menge-' + positionId);
+    const gesamtEl = document.getElementById('pos-gesamt-' + positionId);
+    if (mengeEl) mengeEl.textContent = neueMenge;
+    if (gesamtEl) gesamtEl.textContent = euro(neueMenge * preis);
+  }
+  // Gesamtsumme neu berechnen
+  const { data: positionen } = await sb.from('bestellpositionen').select('gesamt_netto').eq('bestellung_id', bestellungId);
+  const neuesGesamt = (positionen || []).reduce((s, p) => s + parseFloat(p.gesamt_netto), 0);
+  await sb.from('bestellungen').update({ gesamt_netto: neuesGesamt }).eq('id', bestellungId);
+  const gesamtEl2 = document.getElementById('detail-gesamt');
+  if (gesamtEl2) gesamtEl2.textContent = euro(neuesGesamt);
+  toast('Bestellung aktualisiert.');
+  if (neueMenge === 0) {
+    modalSchliessen('detail-modal');
+    await meineBestellungenLaden();
+  }
+}
+
+async function bestellungStornieren(bestellungId) {
+  if (!confirm('Bestellung wirklich stornieren?')) return;
+  await sb.from('bestellungen').update({ status: 'storniert' }).eq('id', bestellungId);
+  toast('Bestellung storniert.');
+  modalSchliessen('detail-modal');
+  await meineBestellungenLaden();
 }
 
 // ── START ──────────────────────────────────────────────────────
