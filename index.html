@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hütterberg Bestellsystem</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --gruen: #2d6a4f;
+  --gruen-hell: #40916c;
+  --gruen-sehr-hell: #d8f3dc;
+  --gruen-bg: #f0faf3;
+  --rot: #c0392b;
+  --orange: #e67e22;
+  --grau: #6c757d;
+  --grau-hell: #f4f6f4;
+  --grau-border: #dee2e6;
+  --text: #1a2e1a;
+  --text-leicht: #4a5e4a;
+  --weiss: #ffffff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--grau-hell); color: var(--text); font-size: 15px; min-height: 100vh; }
+.seite { display: none; }
+.seite.aktiv { display: block; }
+button { cursor: pointer; font-family: inherit; font-size: 14px; }
+input, select, textarea { font-family: inherit; font-size: 14px; }
+
+/* ── Login ── */
+#login-seite { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #1a3a2a 0%, #2d6a4f 100%); }
+.login-box { background: var(--weiss); border-radius: 16px; padding: 40px; width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+.login-logo { text-align: center; margin-bottom: 28px; }
+.login-logo .logo-icon { width: 64px; height: 64px; background: var(--gruen-sehr-hell); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; font-size: 32px; }
+.login-logo h1 { font-size: 22px; color: var(--gruen); font-weight: 700; }
+.login-logo p { font-size: 13px; color: var(--grau); margin-top: 4px; }
+.form-gruppe { margin-bottom: 16px; }
+.form-gruppe label { display: block; font-size: 13px; font-weight: 600; color: var(--text-leicht); margin-bottom: 6px; }
+.form-gruppe input { width: 100%; padding: 10px 14px; border: 1.5px solid var(--grau-border); border-radius: 8px; outline: none; transition: border-color 0.2s; }
+.form-gruppe input:focus { border-color: var(--gruen-hell); }
+.btn-primary { width: 100%; padding: 12px; background: var(--gruen); color: var(--weiss); border: none; border-radius: 8px; font-size: 15px; font-weight: 600; transition: background 0.2s; }
+.btn-primary:hover { background: var(--gruen-hell); }
+.fehler-msg { background: #fde8e8; color: var(--rot); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+.fehler-msg.sichtbar { display: block; }
+
+/* ── Navigationsleiste ── */
+.navbar { background: var(--gruen); color: var(--weiss); padding: 0 24px; height: 58px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+.navbar-logo { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.navbar-logo span { font-size: 22px; }
+.navbar-rechts { display: flex; align-items: center; gap: 16px; }
+.navbar-user { font-size: 13px; opacity: 0.85; }
+.btn-abmelden { background: rgba(255,255,255,0.15); color: var(--weiss); border: 1px solid rgba(255,255,255,0.3); padding: 6px 14px; border-radius: 6px; font-size: 13px; transition: background 0.2s; }
+.btn-abmelden:hover { background: rgba(255,255,255,0.25); }
+
+/* ── Tab-Navigation ── */
+.tab-nav { background: var(--weiss); border-bottom: 2px solid var(--grau-border); padding: 0 24px; display: flex; gap: 4px; overflow-x: auto; }
+.tab-btn { padding: 14px 20px; border: none; background: none; color: var(--grau); font-size: 14px; font-weight: 500; border-bottom: 3px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: all 0.2s; }
+.tab-btn:hover { color: var(--gruen); }
+.tab-btn.aktiv { color: var(--gruen); border-bottom-color: var(--gruen); font-weight: 600; }
+
+/* ── Hauptinhalt ── */
+.haupt { padding: 24px; max-width: 1200px; margin: 0 auto; }
+.tab-inhalt { display: none; }
+.tab-inhalt.aktiv { display: block; }
+
+/* ── Karten ── */
+.karte { background: var(--weiss); border-radius: 12px; border: 1px solid var(--grau-border); padding: 20px; margin-bottom: 20px; }
+.karte-titel { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+/* ── Statistik-Karten ── */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.stat-karte { background: var(--weiss); border-radius: 12px; border: 1px solid var(--grau-border); padding: 20px; }
+.stat-karte .zahl { font-size: 28px; font-weight: 700; color: var(--gruen); }
+.stat-karte .label { font-size: 13px; color: var(--grau); margin-top: 4px; }
+
+/* ── Tabellen ── */
+.tabelle-container { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { background: var(--gruen-bg); color: var(--gruen); font-weight: 600; padding: 10px 14px; text-align: left; border-bottom: 2px solid var(--gruen-sehr-hell); font-size: 13px; }
+td { padding: 10px 14px; border-bottom: 1px solid var(--grau-border); vertical-align: middle; }
+tr:hover td { background: var(--grau-hell); }
+tr:last-child td { border-bottom: none; }
+
+/* ── Status-Badges ── */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.badge-gruen { background: var(--gruen-sehr-hell); color: var(--gruen); }
+.badge-orange { background: #fef3e2; color: #b45309; }
+.badge-rot { background: #fde8e8; color: var(--rot); }
+.badge-grau { background: #f1f1f1; color: var(--grau); }
+.badge-blau { background: #e8f0fe; color: #1a56db; }
+
+/* ── Buttons ── */
+.btn { padding: 8px 16px; border-radius: 7px; border: none; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+.btn-gruen { background: var(--gruen); color: var(--weiss); }
+.btn-gruen:hover { background: var(--gruen-hell); }
+.btn-gruen-outline { background: var(--weiss); color: var(--gruen); border: 1.5px solid var(--gruen); }
+.btn-gruen-outline:hover { background: var(--gruen-sehr-hell); }
+.btn-rot { background: var(--rot); color: var(--weiss); }
+.btn-rot:hover { background: #a93226; }
+.btn-grau { background: var(--grau-hell); color: var(--text-leicht); border: 1px solid var(--grau-border); }
+.btn-grau:hover { background: #e9ecef; }
+.btn-klein { padding: 5px 10px; font-size: 12px; }
+
+/* ── Formular ── */
+.formular-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.formular-grid.einzel { grid-template-columns: 1fr; }
+.feld { margin-bottom: 14px; }
+.feld label { display: block; font-size: 13px; font-weight: 600; color: var(--text-leicht); margin-bottom: 5px; }
+.feld input, .feld select, .feld textarea { width: 100%; padding: 9px 12px; border: 1.5px solid var(--grau-border); border-radius: 7px; outline: none; background: var(--weiss); transition: border-color 0.2s; }
+.feld input:focus, .feld select:focus, .feld textarea:focus { border-color: var(--gruen-hell); }
+.feld textarea { min-height: 80px; resize: vertical; }
+.feld-voll { grid-column: 1 / -1; }
+
+/* ── Modal ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: none; align-items: center; justify-content: center; padding: 16px; }
+.modal-overlay.offen { display: flex; }
+.modal { background: var(--weiss); border-radius: 14px; padding: 28px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
+.modal-kopf { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.modal-kopf h2 { font-size: 18px; font-weight: 700; }
+.modal-schliessen { background: none; border: none; font-size: 22px; color: var(--grau); cursor: pointer; line-height: 1; }
+.modal-fuss { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--grau-border); }
+
+/* ── Shop (Kundenansicht) ── */
+.produkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.produkt-karte { background: var(--weiss); border-radius: 12px; border: 1px solid var(--grau-border); overflow: hidden; transition: box-shadow 0.2s; }
+.produkt-karte:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+.produkt-bild { height: 140px; background: var(--gruen-bg); display: flex; align-items: center; justify-content: center; font-size: 48px; }
+.produkt-info { padding: 14px; }
+.produkt-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.produkt-einheit { font-size: 12px; color: var(--grau); margin-bottom: 8px; }
+.produkt-preis { font-size: 18px; font-weight: 700; color: var(--gruen); margin-bottom: 12px; }
+.produkt-menge { display: flex; align-items: center; gap: 10px; }
+.menge-btn { width: 30px; height: 30px; border-radius: 6px; border: 1.5px solid var(--grau-border); background: var(--weiss); font-size: 18px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--gruen); }
+.menge-btn:hover { background: var(--gruen-sehr-hell); border-color: var(--gruen); }
+.menge-anzeige { font-size: 16px; font-weight: 700; min-width: 30px; text-align: center; }
+
+/* ── Warenkorb ── */
+.warenkorb-leiste { position: fixed; bottom: 0; left: 0; right: 0; background: var(--gruen); color: var(--weiss); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; z-index: 100; transform: translateY(100%); transition: transform 0.3s; }
+.warenkorb-leiste.sichtbar { transform: translateY(0); }
+.warenkorb-info { font-size: 15px; font-weight: 600; }
+.warenkorb-info span { font-size: 13px; font-weight: 400; opacity: 0.85; display: block; }
+
+/* ── Lieferwoche-Banner ── */
+.woche-banner { background: var(--gruen-bg); border: 1.5px solid var(--gruen-sehr-hell); border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: gap; }
+.woche-banner .woche-info { font-size: 14px; color: var(--text-leicht); }
+.woche-banner .woche-info strong { color: var(--gruen); font-size: 16px; }
+.deadline-warnung { font-size: 13px; color: var(--orange); font-weight: 600; }
+
+/* ── Leer-Zustand ── */
+.leer-zustand { text-align: center; padding: 48px 24px; color: var(--grau); }
+.leer-zustand .icon { font-size: 48px; margin-bottom: 12px; }
+.leer-zustand p { font-size: 15px; }
+
+/* ── Erfolg-Meldung ── */
+.toast { position: fixed; top: 72px; right: 24px; background: var(--gruen); color: var(--weiss); padding: 12px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; z-index: 300; transform: translateX(120%); transition: transform 0.3s; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+.toast.sichtbar { transform: translateX(0); }
+.toast.fehler { background: var(--rot); }
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .haupt { padding: 12px; }
+  .formular-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .tab-btn { padding: 12px 14px; font-size: 13px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════
+     LOGIN
+════════════════════════════════════════════════════ -->
+<div id="login-seite" class="seite aktiv">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="logo-icon">🌿</div>
+      <h1>Hütterberg</h1>
+      <p>Bestell- & Abrechnungssystem</p>
+    </div>
+    <div id="login-fehler" class="fehler-msg"></div>
+    <div class="form-gruppe">
+      <label>E-Mail</label>
+      <input type="email" id="login-email" placeholder="name@beispiel.at" />
+    </div>
+    <div class="form-gruppe">
+      <label>Passwort</label>
+      <input type="password" id="login-passwort" placeholder="••••••••" />
+    </div>
+    <button class="btn-primary" onclick="anmelden()">Anmelden</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     ADMIN-BEREICH
+════════════════════════════════════════════════════ -->
+<div id="admin-seite" class="seite">
+  <div class="navbar">
+    <div class="navbar-logo"><span>🌿</span> Hütterberg Admin</div>
+    <div class="navbar-rechts">
+      <span class="navbar-user" id="admin-user-name"></span>
+      <button class="btn-abmelden" onclick="abmelden()">Abmelden</button>
+    </div>
+  </div>
+
+  <div class="tab-nav">
+    <button class="tab-btn aktiv" onclick="tabWechseln('uebersicht', this)">📊 Übersicht</button>
+    <button class="tab-btn" onclick="tabWechseln('bestellungen', this)">📦 Bestellungen</button>
+    <button class="tab-btn" onclick="tabWechseln('produkte', this)">🥦 Produkte</button>
+    <button class="tab-btn" onclick="tabWechseln('kunden', this)">👥 Kunden</button>
+    <button class="tab-btn" onclick="tabWechseln('lieferwochen', this)">📅 Lieferwochen</button>
+    <button class="tab-btn" onclick="tabWechseln('rechnungen', this)">🧾 Rechnungen</button>
+  </div>
+
+  <div class="haupt">
+
+    <!-- ÜBERSICHT -->
+    <div id="tab-uebersicht" class="tab-inhalt aktiv">
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-karte"><div class="zahl" id="stat-bestellungen">–</div><div class="label">Bestellungen diese Woche</div></div>
+        <div class="stat-karte"><div class="zahl" id="stat-kunden">–</div><div class="label">Aktive Kunden</div></div>
+        <div class="stat-karte"><div class="zahl" id="stat-produkte">–</div><div class="label">Aktive Produkte</div></div>
+        <div class="stat-karte"><div class="zahl" id="stat-umsatz">–</div><div class="label">Umsatz diese Woche (netto)</div></div>
+      </div>
+
+      <div class="karte">
+        <div class="karte-titel">📦 Aktuelle Lieferwoche — Mengenübersicht</div>
+        <div id="ernteliste-container">
+          <div class="leer-zustand"><div class="icon">🌱</div><p>Keine aktive Lieferwoche oder keine Bestellungen.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BESTELLUNGEN -->
+    <div id="tab-bestellungen" class="tab-inhalt">
+      <div class="karte">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+          <div class="karte-titel" style="margin:0">📦 Bestellungen</div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <select id="filter-woche" onchange="bestellungenLaden()" style="padding:7px 12px; border:1.5px solid var(--grau-border); border-radius:7px;">
+              <option value="">Alle Wochen</option>
+            </select>
+            <select id="filter-status" onchange="bestellungenLaden()" style="padding:7px 12px; border:1.5px solid var(--grau-border); border-radius:7px;">
+              <option value="">Alle Status</option>
+              <option value="eingegangen">Eingegangen</option>
+              <option value="bestaetigt">Bestätigt</option>
+              <option value="geliefert">Geliefert</option>
+              <option value="storniert">Storniert</option>
+            </select>
+            <button class="btn btn-gruen" onclick="modalOeffnen('bestellung-modal')">+ Bestellung erfassen</button>
+            <button class="btn btn-grau" onclick="csvExport()">↓ CSV Export</button>
+          </div>
+        </div>
+        <div class="tabelle-container">
+          <table>
+            <thead>
+              <tr><th>Kunde</th><th>Lieferwoche</th><th>Quelle</th><th>Gesamt (netto)</th><th>Status</th><th>Aktionen</th></tr>
+            </thead>
+            <tbody id="bestellungen-tabelle">
+              <tr><td colspan="6" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRODUKTE -->
+    <div id="tab-produkte" class="tab-inhalt">
+      <div class="karte">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div class="karte-titel" style="margin:0">🥦 Produkte</div>
+          <button class="btn btn-gruen" onclick="modalOeffnen('produkt-modal')">+ Neues Produkt</button>
+        </div>
+        <div class="tabelle-container">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Einheit</th><th>Basispreis (netto)</th><th>Kategorie</th><th>Status</th><th>Aktionen</th></tr>
+            </thead>
+            <tbody id="produkte-tabelle">
+              <tr><td colspan="6" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- KUNDEN -->
+    <div id="tab-kunden" class="tab-inhalt">
+      <div class="karte">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div class="karte-titel" style="margin:0">👥 Kunden</div>
+          <button class="btn btn-gruen" onclick="modalOeffnen('kunde-modal')">+ Neuer Kunde</button>
+        </div>
+        <div class="tabelle-container">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Kontakt</th><th>E-Mail</th><th>Telefon</th><th>Status</th><th>Aktionen</th></tr>
+            </thead>
+            <tbody id="kunden-tabelle">
+              <tr><td colspan="6" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- LIEFERWOCHEN -->
+    <div id="tab-lieferwochen" class="tab-inhalt">
+      <div class="karte">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div class="karte-titel" style="margin:0">📅 Lieferwochen</div>
+          <button class="btn btn-gruen" onclick="modalOeffnen('woche-modal')">+ Neue Lieferwoche</button>
+        </div>
+        <div class="tabelle-container">
+          <table>
+            <thead>
+              <tr><th>Woche</th><th>Von</th><th>Bis</th><th>Bestelldeadline</th><th>Status</th><th>Aktionen</th></tr>
+            </thead>
+            <tbody id="wochen-tabelle">
+              <tr><td colspan="6" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECHNUNGEN -->
+    <div id="tab-rechnungen" class="tab-inhalt">
+      <div class="karte">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div class="karte-titel" style="margin:0">🧾 Monatsrechnungen</div>
+          <button class="btn btn-gruen" onclick="rechnungErstellen()">+ Monatsrechnung erstellen</button>
+        </div>
+        <div class="tabelle-container">
+          <table>
+            <thead>
+              <tr><th>Rechnungsnr.</th><th>Kunde</th><th>Monat</th><th>Gesamt (netto)</th><th>Status</th><th>Aktionen</th></tr>
+            </thead>
+            <tbody id="rechnungen-tabelle">
+              <tr><td colspan="6" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     KUNDEN-BEREICH (Shop)
+════════════════════════════════════════════════════ -->
+<div id="kunden-seite" class="seite">
+  <div class="navbar">
+    <div class="navbar-logo"><span>🌿</span> Hütterberg Shop</div>
+    <div class="navbar-rechts">
+      <span class="navbar-user" id="kunden-user-name"></span>
+      <button class="btn-abmelden" onclick="abmelden()">Abmelden</button>
+    </div>
+  </div>
+
+  <div class="tab-nav">
+    <button class="tab-btn aktiv" onclick="tabWechseln('shop', this)">🛒 Bestellen</button>
+    <button class="tab-btn" onclick="tabWechseln('meine-bestellungen', this)">📦 Meine Bestellungen</button>
+  </div>
+
+  <div class="haupt">
+
+    <!-- SHOP -->
+    <div id="tab-shop" class="tab-inhalt aktiv">
+      <div class="woche-banner" id="woche-banner">
+        <div class="woche-info">
+          <strong id="aktive-woche-text">Keine aktive Lieferwoche</strong>
+          <span id="deadline-text"></span>
+        </div>
+        <span class="deadline-warnung" id="deadline-warnung"></span>
+      </div>
+      <div class="produkt-grid" id="shop-produkte">
+        <div class="leer-zustand"><div class="icon">🌿</div><p>Keine Produkte verfügbar.</p></div>
+      </div>
+    </div>
+
+    <!-- MEINE BESTELLUNGEN -->
+    <div id="tab-meine-bestellungen" class="tab-inhalt">
+      <div class="karte">
+        <div class="karte-titel">📦 Meine Bestellungen</div>
+        <div class="tabelle-container">
+          <table>
+            <thead>
+              <tr><th>Lieferwoche</th><th>Gesamt (netto)</th><th>Status</th></tr>
+            </thead>
+            <tbody id="meine-bestellungen-tabelle">
+              <tr><td colspan="3" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Warenkorb Leiste -->
+  <div class="warenkorb-leiste" id="warenkorb-leiste">
+    <div class="warenkorb-info">
+      <span id="warenkorb-anzahl">0 Artikel</span>
+      Gesamtsumme: <strong id="warenkorb-summe">€ 0,00</strong>
+    </div>
+    <button class="btn" style="background:var(--weiss);color:var(--gruen);font-weight:700;padding:10px 20px;" onclick="bestellungAbsenden()">Jetzt bestellen →</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     MODALS
+════════════════════════════════════════════════════ -->
+
+<!-- Produkt Modal -->
+<div id="produkt-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-kopf">
+      <h2 id="produkt-modal-titel">Neues Produkt</h2>
+      <button class="modal-schliessen" onclick="modalSchliessen('produkt-modal')">×</button>
+    </div>
+    <input type="hidden" id="produkt-id" />
+    <div class="formular-grid">
+      <div class="feld"><label>Name *</label><input type="text" id="p-name" placeholder="z.B. Tomaten" /></div>
+      <div class="feld"><label>Einheit *</label>
+        <select id="p-einheit">
+          <option>kg</option><option>Bund</option><option>Stück</option><option>Kiste</option><option>Liter</option><option>Portion</option>
+        </select>
+      </div>
+      <div class="feld"><label>Basispreis netto (€) *</label><input type="number" id="p-preis" step="0.01" placeholder="0,00" /></div>
+      <div class="feld"><label>Kategorie</label><input type="text" id="p-kategorie" placeholder="z.B. Gemüse" /></div>
+      <div class="feld feld-voll"><label>Beschreibung</label><textarea id="p-beschreibung" placeholder="Optional…"></textarea></div>
+      <div class="feld"><label>Verfügbar von</label><input type="date" id="p-verfuegbar-von" /></div>
+      <div class="feld"><label>Verfügbar bis</label><input type="date" id="p-verfuegbar-bis" /></div>
+      <div class="feld"><label>Max. Menge</label><input type="number" id="p-max-menge" placeholder="Leer = unbegrenzt" /></div>
+      <div class="feld"><label>Status</label>
+        <select id="p-status">
+          <option value="true">Aktiv</option>
+          <option value="false">Inaktiv</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-fuss">
+      <button class="btn btn-grau" onclick="modalSchliessen('produkt-modal')">Abbrechen</button>
+      <button class="btn btn-gruen" onclick="produktSpeichern()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kunde Modal -->
+<div id="kunde-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-kopf">
+      <h2 id="kunde-modal-titel">Neuer Kunde</h2>
+      <button class="modal-schliessen" onclick="modalSchliessen('kunde-modal')">×</button>
+    </div>
+    <input type="hidden" id="kunde-id" />
+    <div class="formular-grid">
+      <div class="feld feld-voll"><label>Betriebsname *</label><input type="text" id="k-name" placeholder="z.B. Gasthaus Zum Wirt" /></div>
+      <div class="feld"><label>Kontaktperson</label><input type="text" id="k-kontakt" placeholder="Vor- und Nachname" /></div>
+      <div class="feld"><label>E-Mail (= Login) *</label><input type="email" id="k-email" placeholder="name@betrieb.at" /></div>
+      <div class="feld"><label>Telefon</label><input type="tel" id="k-telefon" placeholder="+43 …" /></div>
+      <div class="feld feld-voll"><label>Adresse</label><input type="text" id="k-adresse" placeholder="Straße, PLZ Ort" /></div>
+      <div class="feld"><label>Passwort (für neuen Kunden)</label><input type="password" id="k-passwort" placeholder="Min. 6 Zeichen" /></div>
+      <div class="feld"><label>Mindestbestellwert (€)</label><input type="number" id="k-mindest" step="0.01" placeholder="0,00" /></div>
+      <div class="feld feld-voll"><label>Notizen</label><textarea id="k-notizen" placeholder="Interne Notizen…"></textarea></div>
+    </div>
+    <div class="modal-fuss">
+      <button class="btn btn-grau" onclick="modalSchliessen('kunde-modal')">Abbrechen</button>
+      <button class="btn btn-gruen" onclick="kundeSpeichern()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lieferwoche Modal -->
+<div id="woche-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-kopf">
+      <h2>Neue Lieferwoche</h2>
+      <button class="modal-schliessen" onclick="modalSchliessen('woche-modal')">×</button>
+    </div>
+    <input type="hidden" id="woche-id" />
+    <div class="formular-grid">
+      <div class="feld"><label>Von *</label><input type="date" id="w-von" /></div>
+      <div class="feld"><label>Bis *</label><input type="date" id="w-bis" /></div>
+      <div class="feld feld-voll"><label>Bestelldeadline *</label><input type="datetime-local" id="w-deadline" /></div>
+      <div class="feld"><label>Status</label>
+        <select id="w-status">
+          <option value="offen">Offen (Bestellungen möglich)</option>
+          <option value="geschlossen">Geschlossen</option>
+          <option value="geliefert">Geliefert</option>
+        </select>
+      </div>
+      <div class="feld"><label>Notizen</label><input type="text" id="w-notizen" placeholder="Optional…" /></div>
+    </div>
+    <div class="modal-fuss">
+      <button class="btn btn-grau" onclick="modalSchliessen('woche-modal')">Abbrechen</button>
+      <button class="btn btn-gruen" onclick="wocheSpeichern()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bestellung erfassen Modal (Admin) -->
+<div id="bestellung-modal" class="modal-overlay">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-kopf">
+      <h2>Bestellung erfassen (Telefon)</h2>
+      <button class="modal-schliessen" onclick="modalSchliessen('bestellung-modal')">×</button>
+    </div>
+    <div class="formular-grid">
+      <div class="feld"><label>Kunde *</label>
+        <select id="b-kunde"></select>
+      </div>
+      <div class="feld"><label>Lieferwoche *</label>
+        <select id="b-woche"></select>
+      </div>
+      <div class="feld feld-voll"><label>Notizen</label><input type="text" id="b-notizen" placeholder="Telefonnotiz…" /></div>
+    </div>
+    <div style="margin-top:16px;">
+      <div class="karte-titel" style="font-size:14px; margin-bottom:12px;">Produkte hinzufügen</div>
+      <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
+        <select id="b-produkt-auswahl" style="flex:1; padding:8px 12px; border:1.5px solid var(--grau-border); border-radius:7px;"></select>
+        <input type="number" id="b-menge-eingabe" placeholder="Menge" min="0.1" step="0.1" style="width:100px; padding:8px 12px; border:1.5px solid var(--grau-border); border-radius:7px;" />
+        <button class="btn btn-gruen-outline" onclick="bestellPositionHinzufuegen()">+ Hinzufügen</button>
+      </div>
+      <div id="bestellung-positionen"></div>
+    </div>
+    <div class="modal-fuss">
+      <button class="btn btn-grau" onclick="modalSchliessen('bestellung-modal')">Abbrechen</button>
+      <button class="btn btn-gruen" onclick="bestellungSpeichern()">Bestellung speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kundenpreise Modal -->
+<div id="preise-modal" class="modal-overlay">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-kopf">
+      <h2 id="preise-modal-titel">Individuelle Preise</h2>
+      <button class="modal-schliessen" onclick="modalSchliessen('preise-modal')">×</button>
+    </div>
+    <input type="hidden" id="preise-kunde-id" />
+    <div id="preise-liste"></div>
+    <div class="modal-fuss">
+      <button class="btn btn-grau" onclick="modalSchliessen('preise-modal')">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- ════════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════════ -->
+<script>
+// ── KONFIGURATION ──────────────────────────────────────────────
+// WICHTIG: Hier deine Supabase-Daten eintragen!
+const SUPABASE_URL = 'https://obmaftphagjkolljpkeh.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ibWFmdHBoYWdqa29sbGpwa2VoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMDczOTAsImV4cCI6MjA5MDg4MzM5MH0.a-j_sUpTpaYYYA3miTQuHCje33q4P9sjyq3ntK1PHOQ';
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── GLOBALE STATE ──────────────────────────────────────────────
+let aktuellerNutzer = null;
+let aktuelleRolle = null;
+let warenkorb = {};
+let alleProdukte = [];
+let alleKunden = [];
+let alleWochen = [];
+let aktiveWoche = null;
+let bestellPositionen = [];
+
+// ── HILFSFUNKTIONEN ────────────────────────────────────────────
+function euro(wert) {
+  return '€ ' + parseFloat(wert || 0).toFixed(2).replace('.', ',');
+}
+function datum(str) {
+  if (!str) return '–';
+  return new Date(str).toLocaleDateString('de-AT');
+}
+function datumZeit(str) {
+  if (!str) return '–';
+  return new Date(str).toLocaleString('de-AT', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+}
+function wochenLabel(w) {
+  if (!w) return '–';
+  return datum(w.woche_von) + ' – ' + datum(w.woche_bis);
+}
+function toast(text, fehler = false) {
+  const el = document.getElementById('toast');
+  el.textContent = text;
+  el.className = 'toast' + (fehler ? ' fehler' : '') + ' sichtbar';
+  setTimeout(() => el.className = 'toast', 3000);
+}
+function seiteZeigen(id) {
+  document.querySelectorAll('.seite').forEach(s => s.classList.remove('aktiv'));
+  document.getElementById(id).classList.add('aktiv');
+}
+function tabWechseln(id, btn) {
+  const container = btn.closest('.seite') || document.body;
+  container.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('aktiv'));
+  container.querySelectorAll('.tab-inhalt').forEach(t => t.classList.remove('aktiv'));
+  btn.classList.add('aktiv');
+  document.getElementById('tab-' + id).classList.add('aktiv');
+  if (id === 'bestellungen') bestellungenLaden();
+  if (id === 'produkte') produkteLaden();
+  if (id === 'kunden') kundenLaden();
+  if (id === 'lieferwochen') wochenLaden();
+  if (id === 'rechnungen') rechnungenLaden();
+  if (id === 'uebersicht') uebersichtLaden();
+  if (id === 'meine-bestellungen') meineBestellungenLaden();
+}
+function modalOeffnen(id) {
+  document.getElementById(id).classList.add('offen');
+  if (id === 'bestellung-modal') bestellModalVorbereiten();
+}
+function modalSchliessen(id) {
+  document.getElementById(id).classList.remove('offen');
+  if (id === 'produkt-modal') produktFormularLeeren();
+  if (id === 'kunde-modal') kundeFormularLeeren();
+  if (id === 'bestellung-modal') { bestellPositionen = []; document.getElementById('bestellung-positionen').innerHTML = ''; }
+}
+
+// ── AUTH ───────────────────────────────────────────────────────
+async function anmelden() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw = document.getElementById('login-passwort').value;
+  const fehlerEl = document.getElementById('login-fehler');
+  fehlerEl.classList.remove('sichtbar');
+
+  if (!email || !pw) {
+    fehlerEl.textContent = 'Bitte E-Mail und Passwort eingeben.';
+    fehlerEl.classList.add('sichtbar');
+    return;
+  }
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pw });
+  if (error) {
+    fehlerEl.textContent = 'Anmeldung fehlgeschlagen. Bitte prüfe deine Zugangsdaten.';
+    fehlerEl.classList.add('sichtbar');
+    return;
+  }
+
+  aktuellerNutzer = data.user;
+  await rolleErmitteln();
+}
+
+async function rolleErmitteln() {
+  const { data } = await sb.from('nutzer_rollen').select('rolle').eq('nutzer_id', aktuellerNutzer.id).single();
+  aktuelleRolle = data?.rolle || 'kunde';
+
+  if (aktuelleRolle === 'admin') {
+    document.getElementById('admin-user-name').textContent = aktuellerNutzer.email;
+    seiteZeigen('admin-seite');
+    uebersichtLaden();
+    await Promise.all([produkteImHintergrundLaden(), kundenImHintergrundLaden(), wochenImHintergrundLaden()]);
+  } else {
+    const { data: kundeData } = await sb.from('kunden').select('name').eq('email', aktuellerNutzer.email).single();
+    document.getElementById('kunden-user-name').textContent = kundeData?.name || aktuellerNutzer.email;
+    seiteZeigen('kunden-seite');
+    await shopLaden();
+  }
+}
+
+async function abmelden() {
+  await sb.auth.signOut();
+  aktuellerNutzer = null;
+  aktuelleRolle = null;
+  warenkorb = {};
+  seiteZeigen('login-seite');
+}
+
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT') seiteZeigen('login-seite');
+});
+
+// ── ADMIN: ÜBERSICHT ───────────────────────────────────────────
+async function uebersichtLaden() {
+  const [{ count: bestellCount }, { count: kundenCount }, { count: produktCount }] = await Promise.all([
+    sb.from('bestellungen').select('*', { count: 'exact', head: true }).eq('status', 'eingegangen'),
+    sb.from('kunden').select('*', { count: 'exact', head: true }).eq('aktiv', true),
+    sb.from('produkte').select('*', { count: 'exact', head: true }).eq('aktiv', true),
+  ]);
+
+  document.getElementById('stat-bestellungen').textContent = bestellCount || 0;
+  document.getElementById('stat-kunden').textContent = kundenCount || 0;
+  document.getElementById('stat-produkte').textContent = produktCount || 0;
+
+  const { data: woche } = await sb.from('lieferwochen').select('*').eq('status', 'offen').order('woche_von', { ascending: false }).limit(1).single();
+  aktiveWoche = woche;
+
+  if (woche) {
+    const { data: best } = await sb.from('bestellungen').select('id, gesamt_netto, bestellpositionen(menge, preis_netto, produkte(name, einheit))').eq('lieferwoche_id', woche.id).neq('status', 'storniert');
+    let umsatz = 0;
+    const mengen = {};
+    (best || []).forEach(b => {
+      umsatz += parseFloat(b.gesamt_netto || 0);
+      (b.bestellpositionen || []).forEach(p => {
+        const key = p.produkte?.name + ' (' + p.produkte?.einheit + ')';
+        mengen[key] = (mengen[key] || 0) + parseFloat(p.menge || 0);
+      });
+    });
+    document.getElementById('stat-umsatz').textContent = euro(umsatz);
+
+    const zeilen = Object.entries(mengen).sort((a, b) => b[1] - a[1]);
+    const html = zeilen.length > 0
+      ? `<table><thead><tr><th>Produkt</th><th>Gesamtmenge</th></tr></thead><tbody>
+         ${zeilen.map(([k, v]) => `<tr><td>${k}</td><td><strong>${parseFloat(v).toFixed(2)}</strong></td></tr>`).join('')}
+         </tbody></table>`
+      : '<div class="leer-zustand"><div class="icon">🌱</div><p>Noch keine Bestellungen für diese Woche.</p></div>';
+    document.getElementById('ernteliste-container').innerHTML = html;
+  } else {
+    document.getElementById('stat-umsatz').textContent = '–';
+  }
+}
+
+// ── ADMIN: PRODUKTE ────────────────────────────────────────────
+async function produkteImHintergrundLaden() {
+  const { data } = await sb.from('produkte').select('*').order('name');
+  alleProdukte = data || [];
+}
+
+async function produkteLaden() {
+  const { data, error } = await sb.from('produkte').select('*').order('name');
+  if (error) { toast('Fehler beim Laden der Produkte.', true); return; }
+  alleProdukte = data || [];
+  const tbody = document.getElementById('produkte-tabelle');
+  if (!alleProdukte.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--grau);padding:24px;">Noch keine Produkte angelegt.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = alleProdukte.map(p => `
+    <tr>
+      <td><strong>${p.name}</strong></td>
+      <td>${p.einheit}</td>
+      <td>${euro(p.basispreis_netto)}</td>
+      <td><span class="badge badge-grau">${p.kategorie || '–'}</span></td>
+      <td><span class="badge ${p.aktiv ? 'badge-gruen' : 'badge-rot'}">${p.aktiv ? 'Aktiv' : 'Inaktiv'}</span></td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-gruen-outline btn-klein" onclick="produktBearbeiten('${p.id}')">✏️ Bearbeiten</button>
+        <button class="btn btn-rot btn-klein" onclick="produktLoeschen('${p.id}')">🗑️ Löschen</button>
+      </td>
+    </tr>`).join('');
+}
+
+function produktFormularLeeren() {
+  ['produkt-id','p-name','p-preis','p-kategorie','p-beschreibung','p-verfuegbar-von','p-verfuegbar-bis','p-max-menge'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('p-einheit').value = 'kg';
+  document.getElementById('p-status').value = 'true';
+  document.getElementById('produkt-modal-titel').textContent = 'Neues Produkt';
+}
+
+async function produktBearbeiten(id) {
+  const p = alleProdukte.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('produkt-id').value = p.id;
+  document.getElementById('p-name').value = p.name;
+  document.getElementById('p-einheit').value = p.einheit;
+  document.getElementById('p-preis').value = p.basispreis_netto;
+  document.getElementById('p-kategorie').value = p.kategorie || '';
+  document.getElementById('p-beschreibung').value = p.beschreibung || '';
+  document.getElementById('p-verfuegbar-von').value = p.verfuegbar_von ? p.verfuegbar_von.substring(0,10) : '';
+  document.getElementById('p-verfuegbar-bis').value = p.verfuegbar_bis ? p.verfuegbar_bis.substring(0,10) : '';
+  document.getElementById('p-max-menge').value = p.max_menge || '';
+  document.getElementById('p-status').value = String(p.aktiv);
+  document.getElementById('produkt-modal-titel').textContent = 'Produkt bearbeiten';
+  modalOeffnen('produkt-modal');
+}
+
+async function produktSpeichern() {
+  const id = document.getElementById('produkt-id').value;
+  const daten = {
+    name: document.getElementById('p-name').value.trim(),
+    einheit: document.getElementById('p-einheit').value,
+    basispreis_netto: parseFloat(document.getElementById('p-preis').value) || 0,
+    kategorie: document.getElementById('p-kategorie').value.trim() || null,
+    beschreibung: document.getElementById('p-beschreibung').value.trim() || null,
+    verfuegbar_von: document.getElementById('p-verfuegbar-von').value || null,
+    verfuegbar_bis: document.getElementById('p-verfuegbar-bis').value || null,
+    max_menge: parseFloat(document.getElementById('p-max-menge').value) || null,
+    aktiv: document.getElementById('p-status').value === 'true',
+  };
+  if (!daten.name) { toast('Bitte einen Namen eingeben.', true); return; }
+
+  const { error } = id
+    ? await sb.from('produkte').update(daten).eq('id', id)
+    : await sb.from('produkte').insert(daten);
+
+  if (error) { toast('Fehler beim Speichern: ' + error.message, true); return; }
+  toast(id ? 'Produkt aktualisiert.' : 'Produkt angelegt.');
+  modalSchliessen('produkt-modal');
+  produkteLaden();
+  produkteImHintergrundLaden();
+}
+
+async function produktLoeschen(id) {
+  if (!confirm('Produkt wirklich löschen?')) return;
+  const { error } = await sb.from('produkte').delete().eq('id', id);
+  if (error) { toast('Fehler beim Löschen.', true); return; }
+  toast('Produkt gelöscht.');
+  produkteLaden();
+}
+
+// ── ADMIN: KUNDEN ──────────────────────────────────────────────
+async function kundenImHintergrundLaden() {
+  const { data } = await sb.from('kunden').select('*').order('name');
+  alleKunden = data || [];
+}
+
+async function kundenLaden() {
+  const { data, error } = await sb.from('kunden').select('*').order('name');
+  if (error) { toast('Fehler beim Laden.', true); return; }
+  alleKunden = data || [];
+  const tbody = document.getElementById('kunden-tabelle');
+  if (!alleKunden.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--grau);padding:24px;">Noch keine Kunden angelegt.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = alleKunden.map(k => `
+    <tr>
+      <td><strong>${k.name}</strong></td>
+      <td>${k.kontaktperson || '–'}</td>
+      <td>${k.email}</td>
+      <td>${k.telefon || '–'}</td>
+      <td><span class="badge ${k.aktiv ? 'badge-gruen' : 'badge-rot'}">${k.aktiv ? 'Aktiv' : 'Inaktiv'}</span></td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-gruen-outline btn-klein" onclick="kundeBearbeiten('${k.id}')">✏️</button>
+        <button class="btn btn-blau btn-klein" onclick="preiseOeffnen('${k.id}', '${k.name}')" style="background:#e8f0fe;color:#1a56db;border:none;">💰 Preise</button>
+      </td>
+    </tr>`).join('');
+}
+
+function kundeFormularLeeren() {
+  ['kunde-id','k-name','k-kontakt','k-email','k-telefon','k-adresse','k-passwort','k-mindest','k-notizen'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('kunde-modal-titel').textContent = 'Neuer Kunde';
+}
+
+async function kundeBearbeiten(id) {
+  const k = alleKunden.find(x => x.id === id);
+  if (!k) return;
+  document.getElementById('kunde-id').value = k.id;
+  document.getElementById('k-name').value = k.name;
+  document.getElementById('k-kontakt').value = k.kontaktperson || '';
+  document.getElementById('k-email').value = k.email;
+  document.getElementById('k-telefon').value = k.telefon || '';
+  document.getElementById('k-adresse').value = k.adresse || '';
+  document.getElementById('k-mindest').value = k.mindestbestellwert || '';
+  document.getElementById('k-notizen').value = k.notizen || '';
+  document.getElementById('k-passwort').value = '';
+  document.getElementById('kunde-modal-titel').textContent = 'Kunde bearbeiten';
+  modalOeffnen('kunde-modal');
+}
+
+async function kundeSpeichern() {
+  const id = document.getElementById('kunde-id').value;
+  const email = document.getElementById('k-email').value.trim();
+  const passwort = document.getElementById('k-passwort').value;
+  const daten = {
+    name: document.getElementById('k-name').value.trim(),
+    kontaktperson: document.getElementById('k-kontakt').value.trim() || null,
+    email,
+    telefon: document.getElementById('k-telefon').value.trim() || null,
+    adresse: document.getElementById('k-adresse').value.trim() || null,
+    mindestbestellwert: parseFloat(document.getElementById('k-mindest').value) || null,
+    notizen: document.getElementById('k-notizen').value.trim() || null,
+    aktiv: true,
+  };
+  if (!daten.name || !daten.email) { toast('Name und E-Mail sind Pflichtfelder.', true); return; }
+
+  if (!id && !passwort) { toast('Bitte ein Passwort für den neuen Kunden eingeben.', true); return; }
+
+  if (!id) {
+    const { data: authData, error: authErr } = await sb.auth.admin
+      ? await sb.auth.signUp({ email, password: passwort })
+      : await sb.auth.signUp({ email, password: passwort });
+    if (authErr && !authErr.message.includes('already')) {
+      toast('Auth-Fehler: ' + authErr.message, true); return;
+    }
+  }
+
+  const { error } = id
+    ? await sb.from('kunden').update(daten).eq('id', id)
+    : await sb.from('kunden').insert(daten);
+
+  if (error) { toast('Fehler: ' + error.message, true); return; }
+  toast(id ? 'Kunde aktualisiert.' : 'Kunde angelegt. Der Kunde kann sich jetzt einloggen.');
+  modalSchliessen('kunde-modal');
+  kundenLaden();
+}
+
+// ── ADMIN: INDIVIDUELLE PREISE ─────────────────────────────────
+async function preiseOeffnen(kundeId, kundeName) {
+  document.getElementById('preise-kunde-id').value = kundeId;
+  document.getElementById('preise-modal-titel').textContent = 'Preise: ' + kundeName;
+  await preiseLaden(kundeId);
+  modalOeffnen('preise-modal');
+}
+
+async function preiseLaden(kundeId) {
+  const { data: preise } = await sb.from('kundenpreise').select('*, produkte(name, einheit, basispreis_netto)').eq('kunde_id', kundeId);
+  const preisMap = {};
+  (preise || []).forEach(p => { preisMap[p.produkt_id] = p; });
+
+  const html = alleProdukte.filter(p => p.aktiv).map(p => {
+    const kp = preisMap[p.id];
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--grau-border);">
+      <div style="flex:1"><strong>${p.name}</strong> <span style="color:var(--grau);font-size:12px;">${p.einheit}</span><br>
+        <span style="font-size:12px;color:var(--grau);">Basispreis: ${euro(p.basispreis_netto)}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:13px;color:var(--grau);">Ind. Preis:</span>
+        <input type="number" step="0.01" value="${kp ? kp.preis_netto : ''}" placeholder="${parseFloat(p.basispreis_netto).toFixed(2)}"
+          style="width:90px;padding:6px 8px;border:1.5px solid var(--grau-border);border-radius:6px;font-size:13px;"
+          id="preis-${p.id}" />
+        <button class="btn btn-gruen-outline btn-klein" onclick="preisSpeichern('${kundeId}','${p.id}')">Speichern</button>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('preise-liste').innerHTML = html || '<p style="color:var(--grau)">Keine aktiven Produkte.</p>';
+}
+
+async function preisSpeichern(kundeId, produktId) {
+  const wert = parseFloat(document.getElementById('preis-' + produktId).value);
+  if (isNaN(wert) || wert < 0) { toast('Ungültiger Preis.', true); return; }
+  const { error } = await sb.from('kundenpreise').upsert({ kunde_id: kundeId, produkt_id: produktId, preis_netto: wert }, { onConflict: 'kunde_id,produkt_id' });
+  if (error) { toast('Fehler: ' + error.message, true); return; }
+  toast('Preis gespeichert.');
+}
+
+// ── ADMIN: LIEFERWOCHEN ────────────────────────────────────────
+async function wochenImHintergrundLaden() {
+  const { data } = await sb.from('lieferwochen').select('*').order('woche_von', { ascending: false });
+  alleWochen = data || [];
+  const filter = document.getElementById('filter-woche');
+  filter.innerHTML = '<option value="">Alle Wochen</option>' +
+    alleWochen.map(w => `<option value="${w.id}">${wochenLabel(w)}</option>`).join('');
+  const bWoche = document.getElementById('b-woche');
+  if (bWoche) bWoche.innerHTML = alleWochen.filter(w => w.status === 'offen')
+    .map(w => `<option value="${w.id}">${wochenLabel(w)}</option>`).join('');
+}
+
+async function wochenLaden() {
+  await wochenImHintergrundLaden();
+  const tbody = document.getElementById('wochen-tabelle');
+  if (!alleWochen.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--grau);padding:24px;">Noch keine Lieferwochen angelegt.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = alleWochen.map(w => `
+    <tr>
+      <td><strong>${wochenLabel(w)}</strong></td>
+      <td>${datum(w.woche_von)}</td>
+      <td>${datum(w.woche_bis)}</td>
+      <td>${datumZeit(w.bestelldeadline)}</td>
+      <td><span class="badge ${w.status==='offen'?'badge-gruen':w.status==='geschlossen'?'badge-orange':'badge-grau'}">${w.status}</span></td>
+      <td>
+        <button class="btn btn-gruen-outline btn-klein" onclick="wocheBearbeiten('${w.id}')">✏️ Bearbeiten</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function wocheBearbeiten(id) {
+  const w = alleWochen.find(x => x.id === id);
+  if (!w) return;
+  document.getElementById('woche-id').value = w.id;
+  document.getElementById('w-von').value = w.woche_von;
+  document.getElementById('w-bis').value = w.woche_bis;
+  document.getElementById('w-deadline').value = w.bestelldeadline ? w.bestelldeadline.substring(0,16) : '';
+  document.getElementById('w-status').value = w.status;
+  document.getElementById('w-notizen').value = w.notizen || '';
+  modalOeffnen('woche-modal');
+}
+
+async function wocheSpeichern() {
+  const id = document.getElementById('woche-id').value;
+  const daten = {
+    woche_von: document.getElementById('w-von').value,
+    woche_bis: document.getElementById('w-bis').value,
+    bestelldeadline: document.getElementById('w-deadline').value || null,
+    status: document.getElementById('w-status').value,
+    notizen: document.getElementById('w-notizen').value.trim() || null,
+  };
+  if (!daten.woche_von || !daten.woche_bis) { toast('Bitte Von- und Bis-Datum eingeben.', true); return; }
+  const { error } = id
+    ? await sb.from('lieferwochen').update(daten).eq('id', id)
+    : await sb.from('lieferwochen').insert(daten);
+  if (error) { toast('Fehler: ' + error.message, true); return; }
+  toast(id ? 'Lieferwoche aktualisiert.' : 'Lieferwoche angelegt.');
+  modalSchliessen('woche-modal');
+  document.getElementById('woche-id').value = '';
+  wochenLaden();
+}
+
+// ── ADMIN: BESTELLUNGEN ────────────────────────────────────────
+async function bestellungenLaden() {
+  const wocheFilter = document.getElementById('filter-woche').value;
+  const statusFilter = document.getElementById('filter-status').value;
+  let query = sb.from('bestellungen').select('*, kunden(name), lieferwochen(woche_von, woche_bis)').order('erstellt_am', { ascending: false });
+  if (wocheFilter) query = query.eq('lieferwoche_id', wocheFilter);
+  if (statusFilter) query = query.eq('status', statusFilter);
+  const { data, error } = await query;
+  if (error) { toast('Fehler beim Laden.', true); return; }
+  const tbody = document.getElementById('bestellungen-tabelle');
+  if (!data?.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--grau);padding:24px;">Keine Bestellungen gefunden.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(b => `
+    <tr>
+      <td><strong>${b.kunden?.name || '–'}</strong></td>
+      <td>${wochenLabel(b.lieferwochen)}</td>
+      <td><span class="badge ${b.quelle==='telefon'?'badge-orange':'badge-blau'}">${b.quelle==='telefon'?'📞 Telefon':'🌐 Online'}</span></td>
+      <td>${euro(b.gesamt_netto)}</td>
+      <td>
+        <select onchange="bestellungStatusAendern('${b.id}', this.value)" style="padding:4px 8px;border:1px solid var(--grau-border);border-radius:5px;font-size:12px;">
+          ${['eingegangen','bestaetigt','geliefert','storniert'].map(s =>
+            `<option value="${s}" ${b.status===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <button class="btn btn-gruen-outline btn-klein" onclick="lieferscheinDrucken('${b.id}')">🖨️ Lieferschein</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function bestellungStatusAendern(id, status) {
+  const { error } = await sb.from('bestellungen').update({ status }).eq('id', id);
+  if (error) { toast('Fehler beim Aktualisieren.', true); return; }
+  toast('Status aktualisiert.');
+  if (document.getElementById('tab-uebersicht').classList.contains('aktiv')) uebersichtLaden();
+}
+
+// ── ADMIN: BESTELLUNG ERFASSEN (TELEFON) ───────────────────────
+async function bestellModalVorbereiten() {
+  bestellPositionen = [];
+  document.getElementById('bestellung-positionen').innerHTML = '';
+  const bKunde = document.getElementById('b-kunde');
+  bKunde.innerHTML = alleKunden.map(k => `<option value="${k.id}">${k.name}</option>`).join('');
+  const bWoche = document.getElementById('b-woche');
+  bWoche.innerHTML = alleWochen.filter(w => w.status === 'offen')
+    .map(w => `<option value="${w.id}">${wochenLabel(w)}</option>`).join('');
+  const bProdukt = document.getElementById('b-produkt-auswahl');
+  bProdukt.innerHTML = alleProdukte.filter(p => p.aktiv).map(p => `<option value="${p.id}">${p.name} (${p.einheit}) – ${euro(p.basispreis_netto)}</option>`).join('');
+}
+
+function bestellPositionHinzufuegen() {
+  const produktId = document.getElementById('b-produkt-auswahl').value;
+  const menge = parseFloat(document.getElementById('b-menge-eingabe').value);
+  if (!produktId || !menge || menge <= 0) { toast('Bitte Produkt und Menge eingeben.', true); return; }
+  const produkt = alleProdukte.find(p => p.id === produktId);
+  if (!produkt) return;
+  const vorhanden = bestellPositionen.findIndex(p => p.produktId === produktId);
+  if (vorhanden >= 0) bestellPositionen[vorhanden].menge += menge;
+  else bestellPositionen.push({ produktId, name: produkt.name, einheit: produkt.einheit, menge, preis: parseFloat(produkt.basispreis_netto) });
+  bestellPositionenAnzeigen();
+  document.getElementById('b-menge-eingabe').value = '';
+}
+
+function bestellPositionenAnzeigen() {
+  const container = document.getElementById('bestellung-positionen');
+  if (!bestellPositionen.length) { container.innerHTML = ''; return; }
+  let gesamt = 0;
+  const html = bestellPositionen.map((p, i) => {
+    const total = p.menge * p.preis;
+    gesamt += total;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--grau-border);">
+      <span>${p.name} – ${p.menge} ${p.einheit}</span>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-weight:700;">${euro(total)}</span>
+        <button class="btn btn-rot btn-klein" onclick="positionEntfernen(${i})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+  container.innerHTML = html + `<div style="text-align:right;padding-top:10px;font-size:16px;font-weight:700;color:var(--gruen);">Gesamt: ${euro(gesamt)}</div>`;
+}
+
+function positionEntfernen(index) {
+  bestellPositionen.splice(index, 1);
+  bestellPositionenAnzeigen();
+}
+
+async function bestellungSpeichern() {
+  const kundeId = document.getElementById('b-kunde').value;
+  const wocheId = document.getElementById('b-woche').value;
+  const notizen = document.getElementById('b-notizen').value.trim();
+  if (!kundeId || !wocheId) { toast('Bitte Kunde und Lieferwoche wählen.', true); return; }
+  if (!bestellPositionen.length) { toast('Bitte mindestens ein Produkt hinzufügen.', true); return; }
+  const gesamt = bestellPositionen.reduce((s, p) => s + p.menge * p.preis, 0);
+  const { data: best, error } = await sb.from('bestellungen').insert({
+    kunde_id: kundeId, lieferwoche_id: wocheId, status: 'eingegangen',
+    quelle: 'telefon', gesamt_netto: gesamt, notizen, erstellt_von: aktuellerNutzer.id
+  }).select().single();
+  if (error) { toast('Fehler beim Speichern: ' + error.message, true); return; }
+  const positionen = bestellPositionen.map(p => ({
+    bestellung_id: best.id, produkt_id: p.produktId,
+    menge: p.menge, preis_netto: p.preis, gesamt_netto: p.menge * p.preis
+  }));
+  await sb.from('bestellpositionen').insert(positionen);
+  toast('Bestellung erfasst.');
+  modalSchliessen('bestellung-modal');
+  bestellungenLaden();
+  uebersichtLaden();
+}
+
+// ── ADMIN: RECHNUNGEN ──────────────────────────────────────────
+async function rechnungenLaden() {
+  const { data, error } = await sb.from('rechnungen').select('*, kunden(name)').order('erstellt_am', { ascending: false });
+  if (error) { toast('Fehler beim Laden.', true); return; }
+  const tbody = document.getElementById('rechnungen-tabelle');
+  if (!data?.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--grau);padding:24px;">Noch keine Rechnungen erstellt.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td><strong>${r.nummer}</strong></td>
+      <td>${r.kunden?.name || '–'}</td>
+      <td>${r.monat}/${r.jahr}</td>
+      <td>${euro(r.gesamt_netto)}</td>
+      <td><span class="badge ${r.status==='bezahlt'?'badge-gruen':r.status==='offen'?'badge-orange':'badge-grau'}">${r.status}</span></td>
+      <td style="display:flex;gap:6px;">
+        <button class="btn btn-gruen-outline btn-klein" onclick="rechnungStatusAendern('${r.id}','bezahlt')">✓ Bezahlt</button>
+        <button class="btn btn-grau btn-klein" onclick="rechnungCsvExport('${r.id}')">↓ CSV</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function rechnungErstellen() {
+  const monat = parseInt(prompt('Für welchen Monat? (1-12)'));
+  const jahr = parseInt(prompt('Für welches Jahr? (z.B. 2025)'));
+  if (!monat || !jahr || monat < 1 || monat > 12) { toast('Ungültige Eingabe.', true); return; }
+
+  const { data: best } = await sb.from('bestellungen')
+    .select('*, kunden(id, name), bestellpositionen(*)')
+    .eq('status', 'geliefert');
+
+  const kundenGruppen = {};
+  (best || []).forEach(b => {
+    const d = new Date(b.erstellt_am);
+    if (d.getMonth() + 1 === monat && d.getFullYear() === jahr) {
+      const kid = b.kunden?.id;
+      if (!kundenGruppen[kid]) kundenGruppen[kid] = { kunde: b.kunden, bestellungen: [] };
+      kundenGruppen[kid].bestellungen.push(b);
+    }
+  });
+
+  let erstellt = 0;
+  for (const [kid, gruppe] of Object.entries(kundenGruppen)) {
+    const gesamt = gruppe.bestellungen.reduce((s, b) => s + parseFloat(b.gesamt_netto || 0), 0);
+    const nummer = 'RE-' + jahr + '-' + String(monat).padStart(2,'0') + '-' + kid.substring(0,4).toUpperCase();
+    await sb.from('rechnungen').upsert({
+      nummer, kunde_id: kid, monat, jahr, gesamt_netto: gesamt,
+      status: 'offen', erstellt_am: new Date().toISOString()
+    }, { onConflict: 'nummer' });
+    erstellt++;
+  }
+  toast(erstellt + ' Rechnung(en) für ' + monat + '/' + jahr + ' erstellt.');
+  rechnungenLaden();
+}
+
+async function rechnungStatusAendern(id, status) {
+  await sb.from('rechnungen').update({ status }).eq('id', id);
+  toast('Status aktualisiert.');
+  rechnungenLaden();
+}
+
+// ── CSV EXPORT ─────────────────────────────────────────────────
+async function csvExport() {
+  const wocheFilter = document.getElementById('filter-woche').value;
+  let query = sb.from('bestellungen').select('*, kunden(name), lieferwochen(woche_von, woche_bis), bestellpositionen(menge, preis_netto, gesamt_netto, produkte(name, einheit))');
+  if (wocheFilter) query = query.eq('lieferwoche_id', wocheFilter);
+  const { data } = await query;
+  if (!data?.length) { toast('Keine Daten für Export.', true); return; }
+
+  let zeilen = [['Kunde','Lieferwoche','Produkt','Einheit','Menge','Preis/Einheit','Gesamt netto','Bestellstatus','Quelle']];
+  data.forEach(b => {
+    (b.bestellpositionen || []).forEach(p => {
+      zeilen.push([
+        b.kunden?.name || '', wochenLabel(b.lieferwochen),
+        p.produkte?.name || '', p.produkte?.einheit || '',
+        p.menge, p.preis_netto, p.gesamt_netto, b.status, b.quelle
+      ]);
+    });
+  });
+
+  const csv = zeilen.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'huetterberg_bestellungen_' + new Date().toISOString().substring(0,10) + '.csv';
+  link.click();
+  toast('CSV exportiert.');
+}
+
+async function rechnungCsvExport(rId) {
+  const { data: r } = await sb.from('rechnungen').select('*, kunden(name), rechnungspositionen(*)').eq('id', rId).single();
+  if (!r) return;
+  const zeilen = [['Rechnungsnr.','Kunde','Monat/Jahr','Gesamt netto','Status']];
+  zeilen.push([r.nummer, r.kunden?.name, r.monat+'/'+r.jahr, r.gesamt_netto, r.status]);
+  const csv = zeilen.map(row => row.map(v => '"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'rechnung_'+r.nummer+'.csv';
+  link.click();
+}
+
+// ── LIEFERSCHEIN DRUCKEN ───────────────────────────────────────
+async function lieferscheinDrucken(id) {
+  const { data: b } = await sb.from('bestellungen').select('*, kunden(*), lieferwochen(*), bestellpositionen(*, produkte(name, einheit))').eq('id', id).single();
+  if (!b) return;
+  const nr = 'LS-' + new Date().getFullYear() + '-' + id.substring(0,6).toUpperCase();
+  const positionen = (b.bestellpositionen || []).map(p =>
+    `<tr><td>${p.produkte?.name||''}</td><td>${p.menge} ${p.produkte?.einheit||''}</td><td style="text-align:right">${euro(p.preis_netto)}</td><td style="text-align:right">${euro(p.gesamt_netto)}</td></tr>`
+  ).join('');
+  const html = `<html><head><title>Lieferschein ${nr}</title>
+  <style>body{font-family:Arial,sans-serif;padding:40px;max-width:700px;margin:0 auto;}
+  h1{color:#2d6a4f;}table{width:100%;border-collapse:collapse;margin-top:20px;}
+  th{background:#d8f3dc;padding:8px;text-align:left;}td{padding:8px;border-bottom:1px solid #eee;}
+  .kopf{display:flex;justify-content:space-between;margin-bottom:30px;}
+  .gesamt{text-align:right;font-size:18px;font-weight:bold;margin-top:16px;color:#2d6a4f;}</style></head>
+  <body>
+  <div class="kopf"><div><h1>🌿 Hütterberg</h1><p>Lieferschein</p></div><div style="text-align:right"><strong>${nr}</strong><br>${datum(new Date().toISOString())}</div></div>
+  <p><strong>Kunde:</strong> ${b.kunden?.name||''}<br><strong>Adresse:</strong> ${b.kunden?.adresse||'–'}<br><strong>Lieferwoche:</strong> ${wochenLabel(b.lieferwochen)}</p>
+  <table><thead><tr><th>Produkt</th><th>Menge</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead>
+  <tbody>${positionen}</tbody></table>
+  <div class="gesamt">Gesamtsumme netto: ${euro(b.gesamt_netto)}</div>
+  <p style="margin-top:40px;color:#999;font-size:12px;">Pauschalierter Betrieb – kein Steuerausweis</p>
+  </body></html>`;
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.print();
+}
+
+// ── KUNDEN-SHOP ────────────────────────────────────────────────
+async function shopLaden() {
+  const { data: woche } = await sb.from('lieferwochen').select('*').eq('status', 'offen').order('woche_von', { ascending: false }).limit(1).single();
+  aktiveWoche = woche;
+
+  if (!woche) {
+    document.getElementById('aktive-woche-text').textContent = 'Gerade keine offene Lieferwoche';
+    document.getElementById('shop-produkte').innerHTML = '<div class="leer-zustand"><div class="icon">📅</div><p>Aktuell gibt es keine offene Bestellwoche. Bitte schaue später wieder rein.</p></div>';
+    return;
+  }
+
+  document.getElementById('aktive-woche-text').textContent = 'Lieferwoche: ' + wochenLabel(woche);
+  const deadline = new Date(woche.bestelldeadline);
+  const jetzt = new Date();
+  const diffStunden = Math.round((deadline - jetzt) / 3600000);
+  document.getElementById('deadline-text').textContent = 'Bestelldeadline: ' + datumZeit(woche.bestelldeadline);
+  if (diffStunden < 24 && diffStunden > 0) document.getElementById('deadline-warnung').textContent = '⚠️ Noch ' + diffStunden + ' Stunden!';
+
+  const { data: kundeData } = await sb.from('kunden').select('id').eq('email', aktuellerNutzer.email).single();
+  const kundeId = kundeData?.id;
+
+  const { data: produkte } = await sb.from('produkte').select('*').eq('aktiv', true).order('name');
+  const { data: kundenpreise } = kundeId
+    ? await sb.from('kundenpreise').select('*').eq('kunde_id', kundeId)
+    : { data: [] };
+
+  const preisMap = {};
+  (kundenpreise || []).forEach(p => { preisMap[p.produkt_id] = p.preis_netto; });
+
+  alleProdukte = produkte || [];
+  const container = document.getElementById('shop-produkte');
+  if (!alleProdukte.length) {
+    container.innerHTML = '<div class="leer-zustand"><div class="icon">🌱</div><p>Keine Produkte verfügbar.</p></div>';
+    return;
+  }
+
+  container.innerHTML = alleProdukte.map(p => {
+    const preis = preisMap[p.id] !== undefined ? preisMap[p.id] : p.basispreis_netto;
+    return `<div class="produkt-karte">
+      <div class="produkt-bild">🥦</div>
+      <div class="produkt-info">
+        <div class="produkt-name">${p.name}</div>
+        <div class="produkt-einheit">pro ${p.einheit}</div>
+        <div class="produkt-preis">${euro(preis)}</div>
+        <div class="produkt-menge">
+          <button class="menge-btn" onclick="mengeAendern('${p.id}', -1, ${preis})">−</button>
+          <span class="menge-anzeige" id="menge-${p.id}">${warenkorb[p.id]?.menge || 0}</span>
+          <button class="menge-btn" onclick="mengeAendern('${p.id}', 1, ${preis})">+</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function mengeAendern(produktId, delta, preis) {
+  if (!aktiveWoche) { toast('Keine offene Bestellwoche.', true); return; }
+  const jetzt = new Date();
+  if (aktiveWoche.bestelldeadline && new Date(aktiveWoche.bestelldeadline) < jetzt) {
+    toast('Die Bestelldeadline ist bereits abgelaufen.', true); return;
+  }
+  const aktuell = warenkorb[produktId]?.menge || 0;
+  const neu = Math.max(0, aktuell + delta);
+  const produkt = alleProdukte.find(p => p.id === produktId);
+  if (neu === 0) delete warenkorb[produktId];
+  else warenkorb[produktId] = { menge: neu, preis, name: produkt?.name, einheit: produkt?.einheit };
+  const el = document.getElementById('menge-' + produktId);
+  if (el) el.textContent = neu;
+  warenkorbAktualisieren();
+}
+
+function warenkorbAktualisieren() {
+  const anzahl = Object.values(warenkorb).reduce((s, v) => s + v.menge, 0);
+  const summe = Object.values(warenkorb).reduce((s, v) => s + v.menge * v.preis, 0);
+  document.getElementById('warenkorb-anzahl').textContent = anzahl + ' Artikel';
+  document.getElementById('warenkorb-summe').textContent = euro(summe);
+  const leiste = document.getElementById('warenkorb-leiste');
+  leiste.classList.toggle('sichtbar', anzahl > 0);
+}
+
+async function bestellungAbsenden() {
+  if (!Object.keys(warenkorb).length) { toast('Der Warenkorb ist leer.', true); return; }
+  if (!aktiveWoche) { toast('Keine offene Lieferwoche.', true); return; }
+
+  const { data: kundeData } = await sb.from('kunden').select('id').eq('email', aktuellerNutzer.email).single();
+  const gesamt = Object.values(warenkorb).reduce((s, v) => s + v.menge * v.preis, 0);
+
+  const { data: best, error } = await sb.from('bestellungen').insert({
+    kunde_id: kundeData.id, lieferwoche_id: aktiveWoche.id,
+    status: 'eingegangen', quelle: 'online',
+    gesamt_netto: gesamt, erstellt_von: aktuellerNutzer.id
+  }).select().single();
+
+  if (error) { toast('Fehler: ' + error.message, true); return; }
+
+  const positionen = Object.entries(warenkorb).map(([produktId, v]) => ({
+    bestellung_id: best.id, produkt_id: produktId,
+    menge: v.menge, preis_netto: v.preis, gesamt_netto: v.menge * v.preis
+  }));
+  await sb.from('bestellpositionen').insert(positionen);
+
+  warenkorb = {};
+  warenkorbAktualisieren();
+  toast('✅ Bestellung erfolgreich abgesendet!');
+  await shopLaden();
+}
+
+async function meineBestellungenLaden() {
+  const { data: kundeData } = await sb.from('kunden').select('id').eq('email', aktuellerNutzer.email).single();
+  if (!kundeData) return;
+  const { data } = await sb.from('bestellungen').select('*, lieferwochen(woche_von, woche_bis)').eq('kunde_id', kundeData.id).order('erstellt_am', { ascending: false });
+  const tbody = document.getElementById('meine-bestellungen-tabelle');
+  if (!data?.length) {
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--grau);padding:24px;">Noch keine Bestellungen.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(b => `
+    <tr>
+      <td>${wochenLabel(b.lieferwochen)}</td>
+      <td>${euro(b.gesamt_netto)}</td>
+      <td><span class="badge ${b.status==='geliefert'?'badge-gruen':b.status==='eingegangen'?'badge-orange':b.status==='bestaetigt'?'badge-blau':'badge-rot'}">${b.status}</span></td>
+    </tr>`).join('');
+}
+
+// ── START ──────────────────────────────────────────────────────
+(async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    aktuellerNutzer = session.user;
+    await rolleErmitteln();
+  }
+})();
+</script>
+</body>
+</html>
