@@ -353,6 +353,7 @@ tr:last-child td { border-bottom: none; }
 <div id="kunden-seite" class="seite">
   <div class="navbar">
     <div class="navbar-logo"><span>🌿</span> Hütterberg Shop</div>
+  <div class="navbar-rechts" id="kunden-navbar-rechts">
     <div class="navbar-rechts">
       <span class="navbar-user" id="kunden-user-name"></span>
       <button class="btn-abmelden" onclick="abmelden()">Abmelden</button>
@@ -405,7 +406,7 @@ tr:last-child td { border-bottom: none; }
       <span id="warenkorb-anzahl">0 Artikel</span>
       Gesamtsumme: <strong id="warenkorb-summe">€ 0,00</strong>
     </div>
-    <button class="btn" style="background:var(--weiss);color:var(--gruen);font-weight:700;padding:10px 20px;" onclick="zusammenfassungZeigen()">Bestellung prüfen →</button>
+    <button class="btn" style="background:var(--weiss);color:var(--gruen);font-weight:700;padding:10px 20px;" onclick="zusammenfassungZeigen()">🛒 Warenkorb ansehen</button>
   </div>
 </div>
 
@@ -595,7 +596,7 @@ tr:last-child td { border-bottom: none; }
 <div id="zusammenfassung-modal" class="modal-overlay">
   <div class="modal" style="max-width:560px">
     <div class="modal-kopf">
-      <h2>Bestellung bestätigen</h2>
+      <h2>🛒 Warenkorb</h2>
       <button class="modal-schliessen" onclick="modalSchliessen('zusammenfassung-modal')">×</button>
     </div>
     <div id="zusammenfassung-inhalt"></div>
@@ -1533,104 +1534,215 @@ async function bestellungFinalAbsenden() {
 }
 
 // ── BESTELLUNG DETAIL / BEARBEITEN ────────────────────────────
+// Globale Variable für Bearbeitungs-State
+let bestellungBearbeitungState = {};
+
 async function bestellungDetailZeigen(bestellungId, status) {
   const { data: b } = await sb.from('bestellungen')
-    .select('*, lieferwochen(*), bestellpositionen(*, produkte(name, einheit))')
+    .select('*, lieferwochen(*), bestellpositionen(*, produkte(name, einheit, bild_url))')
     .eq('id', bestellungId).single();
   if (!b) return;
 
   const bearbeitbar = status === 'eingegangen';
   const jetzt = new Date();
   const deadlineVorbei = b.lieferwochen?.bestelldeadline && new Date(b.lieferwochen.bestelldeadline) < jetzt;
+  const kannBearbeiten = bearbeitbar && !deadlineVorbei;
 
-  document.getElementById('detail-modal-titel').textContent =
-    bearbeitbar && !deadlineVorbei ? '✏️ Bestellung bearbeiten' : '🔍 Bestelldetails';
+  // State für Änderungen speichern
+  bestellungBearbeitungState = {
+    id: bestellungId,
+    positionen: {},
+    original: {},
+    geaendert: false
+  };
+  (b.bestellpositionen || []).forEach(p => {
+    bestellungBearbeitungState.positionen[p.id] = { menge: parseFloat(p.menge), preis: parseFloat(p.preis_netto), name: p.produkte?.name, einheit: p.produkte?.einheit, gesamtNetto: parseFloat(p.gesamt_netto) };
+    bestellungBearbeitungState.original[p.id] = parseFloat(p.menge);
+  });
 
-  const zeilen = (b.bestellpositionen || []).map(p => `
-    <tr>
-      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border)">${p.produkte?.name || '–'}</td>
-      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:center">
-        ${bearbeitbar && !deadlineVorbei
-          ? `<div style="display:flex;align-items:center;justify-content:center;gap:8px;">
-               <button class="menge-btn" onclick="positionMengeAendern('${bestellungId}','${p.id}','${p.produkt_id}',${p.menge},-1,${p.preis_netto})">−</button>
-               <span id="pos-menge-${p.id}" style="font-weight:700;min-width:30px;text-align:center">${p.menge}</span>
-               <button class="menge-btn" onclick="positionMengeAendern('${bestellungId}','${p.id}','${p.produkt_id}',${p.menge},1,${p.preis_netto})">+</button>
-             </div>`
-          : `<strong>${p.menge} ${p.produkte?.einheit || ''}</strong>`}
-      </td>
-      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:right">${euro(p.preis_netto)}</td>
-      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:right;font-weight:700" id="pos-gesamt-${p.id}">${euro(p.gesamt_netto)}</td>
-    </tr>`).join('');
-
-  const gesamt = (b.bestellpositionen || []).reduce((s, p) => s + parseFloat(p.gesamt_netto), 0);
-
-  document.getElementById('detail-modal-inhalt').innerHTML = `
-    <div style="background:var(--gruen-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">
-      <strong>Lieferwoche:</strong> ${wochenLabel(b.lieferwochen)} &nbsp;|&nbsp;
-      <strong>Status:</strong> <span class="badge ${status==='eingegangen'?'badge-orange':status==='bestaetigt'?'badge-blau':'badge-gruen'}">${status}</span>
-      ${deadlineVorbei ? '<br><span style="color:var(--rot);font-size:12px;">⚠️ Deadline abgelaufen – keine Änderungen mehr möglich</span>' : ''}
-    </div>
-    <table style="width:100%;font-size:14px;border-collapse:collapse">
-      <thead><tr>
-        <th style="text-align:left;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Produkt</th>
-        <th style="text-align:center;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Menge</th>
-        <th style="text-align:right;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Preis</th>
-        <th style="text-align:right;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Gesamt</th>
-      </tr></thead>
-      <tbody>${zeilen}</tbody>
-    </table>
-    <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:10px;border-top:2px solid var(--gruen)">
-      <span style="font-weight:600">Gesamtsumme netto</span>
-      <span style="font-size:20px;font-weight:700;color:var(--gruen)" id="detail-gesamt">${euro(gesamt)}</span>
-    </div>`;
-
-  const fuss = document.getElementById('detail-modal-fuss');
-  if (bearbeitbar && !deadlineVorbei) {
-    fuss.innerHTML = `
-      <button class="btn btn-rot" onclick="bestellungStornieren('${bestellungId}')">🗑️ Bestellung stornieren</button>
-      <button class="btn btn-grau" onclick="modalSchliessen('detail-modal')">Schließen</button>`;
-  } else {
-    fuss.innerHTML = `<button class="btn btn-grau" onclick="modalSchliessen('detail-modal')">Schließen</button>`;
-  }
-
+  document.getElementById('detail-modal-titel').textContent = kannBearbeiten ? '✏️ Bestellung bearbeiten' : '🔍 Bestelldetails';
+  renderDetailModal(b, kannBearbeiten, deadlineVorbei);
   modalOeffnen('detail-modal');
 }
 
-async function positionMengeAendern(bestellungId, positionId, produktId, aktMenge, delta, preis) {
-  const neueMenge = Math.max(0, parseFloat(aktMenge) + delta);
-  if (neueMenge === 0) {
-    if (!confirm('Position entfernen?')) return;
-    await sb.from('bestellpositionen').delete().eq('id', positionId);
+function renderDetailModal(b, kannBearbeiten, deadlineVorbei) {
+  const emojis = {'Tomaten':'🍅','Zucchini':'🥒','Salat (Lollo Rosso)':'🥬','Gurken':'🥒','Karotten':'🥕','Kresse':'🌿','Basilikum':'🌿','Radieschen':'🌱','Paprika (rot)':'🫑','Erdbeeren':'🍓','Spinat':'🥬','Kohlrabi':'🥦'};
+
+  const positionen = Object.entries(bestellungBearbeitungState.positionen);
+  const gesamt = positionen.reduce((s, [, v]) => s + v.menge * v.preis, 0);
+
+  const zeilen = positionen.map(([posId, p]) => {
+    const bildHtml = p.bild_url
+      ? `<img src="${p.bild_url}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;">`
+      : `<span style="font-size:24px">${emojis[p.name]||'🌿'}</span>`;
+    return `<tr id="zeile-${posId}">
+      <td style="padding:12px 8px;border-bottom:1px solid var(--grau-border)">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:36px;height:36px;border-radius:6px;overflow:hidden;background:var(--gruen-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${bildHtml}</div>
+          <span style="font-weight:500">${p.name}</span>
+        </div>
+      </td>
+      <td style="padding:12px 8px;border-bottom:1px solid var(--grau-border);text-align:center">
+        ${kannBearbeiten
+          ? `<div style="display:flex;align-items:center;justify-content:center;gap:8px;">
+               <button class="menge-btn" onclick="detailMengeAendern('${posId}',-1)" style="width:32px;height:32px;border-radius:8px;border:1.5px solid var(--grau-border);background:var(--weiss);font-size:18px;font-weight:700;color:var(--gruen);display:flex;align-items:center;justify-content:center;">−</button>
+               <span id="dm-${posId}" style="font-size:16px;font-weight:700;min-width:36px;text-align:center;color:var(--gruen)">${p.menge}</span>
+               <button class="menge-btn" onclick="detailMengeAendern('${posId}',1)" style="width:32px;height:32px;border-radius:8px;border:1.5px solid var(--grau-border);background:var(--weiss);font-size:18px;font-weight:700;color:var(--gruen);display:flex;align-items:center;justify-content:center;">+</button>
+             </div>
+             <div style="font-size:11px;color:var(--grau);margin-top:4px;text-align:center">${p.einheit}</div>`
+          : `<strong>${p.menge} ${p.einheit}</strong>`}
+      </td>
+      <td style="padding:12px 8px;border-bottom:1px solid var(--grau-border);text-align:right;color:var(--grau)">${euro(p.preis)}</td>
+      <td style="padding:12px 8px;border-bottom:1px solid var(--grau-border);text-align:right;font-weight:700" id="dg-${posId}">${euro(p.menge * p.preis)}</td>
+      ${kannBearbeiten ? `<td style="padding:12px 8px;border-bottom:1px solid var(--grau-border);text-align:center"><button onclick="detailPositionEntfernen('${posId}')" style="background:none;border:none;color:var(--rot);font-size:18px;cursor:pointer;padding:4px;">✕</button></td>` : ''}
+    </tr>`;
+  }).join('');
+
+  const statusBadge = {'eingegangen':'badge-orange','bestaetigt':'badge-blau','geliefert':'badge-gruen','storniert':'badge-rot'};
+
+  document.getElementById('detail-modal-inhalt').innerHTML = `
+    <div style="background:var(--gruen-bg);border:1.5px solid var(--gruen-sehr-hell);border-radius:10px;padding:12px 16px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-weight:600;color:var(--gruen)">${wochenLabel(b.lieferwochen)}</div>
+          <div style="font-size:12px;color:var(--grau)">Deadline: ${datumZeit(b.lieferwochen?.bestelldeadline)}</div>
+        </div>
+        <span class="badge ${statusBadge[b.status]||'badge-grau'}">${b.status}</span>
+      </div>
+      ${deadlineVorbei ? '<div style="margin-top:8px;color:var(--rot);font-size:12px;font-weight:600;">⚠️ Bestelldeadline abgelaufen – keine Änderungen mehr möglich</div>' : ''}
+    </div>
+    ${kannBearbeiten ? '<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#7c6300;">✏️ Du kannst Mengen anpassen oder Positionen entfernen. Klicke danach auf <strong>Änderungen speichern</strong>.</div>' : ''}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;font-size:14px;border-collapse:collapse;min-width:400px">
+        <thead>
+          <tr style="background:var(--gruen-bg)">
+            <th style="text-align:left;padding:10px 8px;color:var(--gruen);font-size:13px;">Produkt</th>
+            <th style="text-align:center;padding:10px 8px;color:var(--gruen);font-size:13px;">Menge</th>
+            <th style="text-align:right;padding:10px 8px;color:var(--gruen);font-size:13px;">Preis</th>
+            <th style="text-align:right;padding:10px 8px;color:var(--gruen);font-size:13px;">Gesamt</th>
+            ${kannBearbeiten ? '<th style="width:40px"></th>' : ''}
+          </tr>
+        </thead>
+        <tbody id="detail-tbody">${zeilen}</tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding:12px 16px;background:var(--gruen-bg);border-radius:8px;">
+      <span style="font-size:14px;font-weight:600;color:var(--text-leicht)">Gesamtsumme netto</span>
+      <span style="font-size:22px;font-weight:700;color:var(--gruen)" id="detail-gesamt">${euro(gesamt)}</span>
+    </div>
+    <p style="font-size:11px;color:var(--grau);margin-top:6px;text-align:right;">Pauschalierter Betrieb – kein Steuerausweis</p>`;
+
+  const fuss = document.getElementById('detail-modal-fuss');
+  if (kannBearbeiten) {
+    fuss.innerHTML = `
+      <button class="btn btn-rot" style="margin-right:auto" onclick="bestellungStornierenMitBestaetigung('${b.id}')">🗑️ Stornieren</button>
+      <button class="btn btn-grau" onclick="modalSchliessen('detail-modal')">Abbrechen</button>
+      <button class="btn btn-gruen" onclick="aenderungenBestaetigen('${b.id}')">✓ Änderungen speichern</button>`;
   } else {
-    await sb.from('bestellpositionen').update({
-      menge: neueMenge,
-      gesamt_netto: neueMenge * preis
-    }).eq('id', positionId);
-    const mengeEl = document.getElementById('pos-menge-' + positionId);
-    const gesamtEl = document.getElementById('pos-gesamt-' + positionId);
-    if (mengeEl) mengeEl.textContent = neueMenge;
-    if (gesamtEl) gesamtEl.textContent = euro(neueMenge * preis);
-  }
-  // Gesamtsumme neu berechnen
-  const { data: positionen } = await sb.from('bestellpositionen').select('gesamt_netto').eq('bestellung_id', bestellungId);
-  const neuesGesamt = (positionen || []).reduce((s, p) => s + parseFloat(p.gesamt_netto), 0);
-  await sb.from('bestellungen').update({ gesamt_netto: neuesGesamt }).eq('id', bestellungId);
-  const gesamtEl2 = document.getElementById('detail-gesamt');
-  if (gesamtEl2) gesamtEl2.textContent = euro(neuesGesamt);
-  toast('Bestellung aktualisiert.');
-  if (neueMenge === 0) {
-    modalSchliessen('detail-modal');
-    await meineBestellungenLaden();
+    fuss.innerHTML = `<button class="btn btn-grau" onclick="modalSchliessen('detail-modal')">Schließen</button>`;
   }
 }
 
-async function bestellungStornieren(bestellungId) {
-  if (!confirm('Bestellung wirklich stornieren?')) return;
-  await sb.from('bestellungen').update({ status: 'storniert' }).eq('id', bestellungId);
-  toast('Bestellung storniert.');
+function detailMengeAendern(posId, delta) {
+  const state = bestellungBearbeitungState.positionen[posId];
+  if (!state) return;
+  const neu = Math.max(0, state.menge + delta);
+  if (neu === 0) {
+    detailPositionEntfernen(posId);
+    return;
+  }
+  state.menge = neu;
+  bestellungBearbeitungState.geaendert = true;
+  document.getElementById('dm-' + posId).textContent = neu;
+  document.getElementById('dg-' + posId).textContent = euro(neu * state.preis);
+  detailGesamtAktualisieren();
+}
+
+function detailPositionEntfernen(posId) {
+  const state = bestellungBearbeitungState.positionen[posId];
+  if (!confirm(`"${state?.name}" aus der Bestellung entfernen?`)) return;
+  const zeile = document.getElementById('zeile-' + posId);
+  if (zeile) zeile.style.opacity = '0.3';
+  state.menge = 0;
+  bestellungBearbeitungState.geaendert = true;
+  detailGesamtAktualisieren();
+  if (zeile) {
+    zeile.style.transition = 'opacity 0.3s';
+    setTimeout(() => zeile.remove(), 300);
+  }
+}
+
+function detailGesamtAktualisieren() {
+  const gesamt = Object.values(bestellungBearbeitungState.positionen)
+    .reduce((s, v) => s + v.menge * v.preis, 0);
+  const el = document.getElementById('detail-gesamt');
+  if (el) el.textContent = euro(gesamt);
+}
+
+async function aenderungenBestaetigen(bestellungId) {
+  if (!bestellungBearbeitungState.geaendert) {
+    toast('Keine Änderungen vorgenommen.');
+    modalSchliessen('detail-modal');
+    return;
+  }
+
+  // Zusammenfassung der Änderungen zeigen
+  const geaenderte = Object.entries(bestellungBearbeitungState.positionen)
+    .filter(([posId, v]) => v.menge !== bestellungBearbeitungState.original[posId]);
+
+  const aenderungsText = geaenderte.map(([posId, v]) => {
+    const alt = bestellungBearbeitungState.original[posId];
+    if (v.menge === 0) return `• ${v.name}: entfernt`;
+    return `• ${v.name}: ${alt} → ${v.menge} ${v.einheit}`;
+  }).join('
+');
+
+  const neuesGesamt = Object.values(bestellungBearbeitungState.positionen)
+    .reduce((s, v) => s + v.menge * v.preis, 0);
+
+  if (!confirm(`Folgende Änderungen übernehmen?
+
+${aenderungsText}
+
+Neue Gesamtsumme: ${euro(neuesGesamt)}
+
+Änderungen speichern?`)) return;
+
+  // In Datenbank speichern
+  let fehler = false;
+  for (const [posId, v] of Object.entries(bestellungBearbeitungState.positionen)) {
+    if (v.menge === 0) {
+      const { error } = await sb.from('bestellpositionen').delete().eq('id', posId);
+      if (error) { fehler = true; break; }
+    } else if (v.menge !== bestellungBearbeitungState.original[posId]) {
+      const { error } = await sb.from('bestellpositionen').update({
+        menge: v.menge, gesamt_netto: v.menge * v.preis
+      }).eq('id', posId);
+      if (error) { fehler = true; break; }
+    }
+  }
+
+  if (fehler) { toast('Fehler beim Speichern.', true); return; }
+  await sb.from('bestellungen').update({ gesamt_netto: neuesGesamt }).eq('id', bestellungId);
+  toast('✅ Bestellung erfolgreich aktualisiert!');
   modalSchliessen('detail-modal');
   await meineBestellungenLaden();
 }
+
+async function bestellungStornierenMitBestaetigung(bestellungId) {
+  if (!confirm('Bestellung wirklich stornieren?
+
+Diese Aktion kann nicht rückgängig gemacht werden.')) return;
+  const { error } = await sb.from('bestellungen').update({ status: 'storniert' }).eq('id', bestellungId);
+  if (error) { toast('Fehler beim Stornieren.', true); return; }
+  toast('Bestellung wurde storniert.');
+  modalSchliessen('detail-modal');
+  await meineBestellungenLaden();
+}
+
+
+
+
 
 // ── START ──────────────────────────────────────────────────────
 (async () => {
