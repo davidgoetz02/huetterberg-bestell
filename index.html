@@ -22,13 +22,14 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--grau-hell); color: var(--text); font-size: 15px; min-height: 100vh; }
-.seite { display: none; }
-.seite.aktiv { display: block; }
+.seite { display: none !important; }
+.seite.aktiv { display: block !important; }
 button { cursor: pointer; font-family: inherit; font-size: 14px; }
 input, select, textarea { font-family: inherit; font-size: 14px; }
 
 /* ── Login ── */
-#login-seite { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #1a3a2a 0%, #2d6a4f 100%); }
+#login-seite { min-height: 100vh; width: 100%; position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #1a3a2a 0%, #2d6a4f 100%); z-index: 999; }
+#login-seite.aktiv { display: flex !important; }
 .login-box { background: var(--weiss); border-radius: 16px; padding: 40px; width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
 .login-logo { text-align: center; margin-bottom: 28px; }
 .login-logo .logo-icon { width: 64px; height: 64px; background: var(--gruen-sehr-hell); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; font-size: 32px; }
