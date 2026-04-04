@@ -647,14 +647,15 @@ async function anmelden() {
 }
 
 async function rolleErmitteln() {
-  const { data } = await sb.from('nutzer_rollen').select('rolle').eq('nutzer_id', aktuellerNutzer.id).single();
+  const { data: rollenArr } = await sb.from('nutzer_rollen').select('rolle').eq('nutzer_id', aktuellerNutzer.id).limit(1);
+  const data = rollenArr?.[0] || null;
   aktuelleRolle = data?.rolle || 'kunde';
 
   if (aktuelleRolle === 'admin') {
     document.getElementById('admin-user-name').textContent = aktuellerNutzer.email;
     seiteZeigen('admin-seite');
-    uebersichtLaden();
     await Promise.all([produkteImHintergrundLaden(), kundenImHintergrundLaden(), wochenImHintergrundLaden()]);
+    uebersichtLaden();
   } else {
     const { data: kundeData } = await sb.from('kunden').select('name').eq('email', aktuellerNutzer.email).single();
     document.getElementById('kunden-user-name').textContent = kundeData?.name || aktuellerNutzer.email;
@@ -671,7 +672,7 @@ async function abmelden() {
   seiteZeigen('login-seite');
 }
 
-sb.auth.onAuthStateChange((event, session) => {
+sb.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_OUT') seiteZeigen('login-seite');
 });
 
@@ -687,7 +688,8 @@ async function uebersichtLaden() {
   document.getElementById('stat-kunden').textContent = kundenCount || 0;
   document.getElementById('stat-produkte').textContent = produktCount || 0;
 
-  const { data: woche } = await sb.from('lieferwochen').select('*').eq('status', 'offen').order('woche_von', { ascending: false }).limit(1).single();
+  const { data: wocheArr } = await sb.from('lieferwochen').select('*').eq('status', 'offen').order('woche_von', { ascending: false }).limit(1);
+  const woche = wocheArr?.[0] || null;
   aktiveWoche = woche;
 
   if (woche) {
@@ -1236,7 +1238,8 @@ async function lieferscheinDrucken(id) {
 
 // ── KUNDEN-SHOP ────────────────────────────────────────────────
 async function shopLaden() {
-  const { data: woche } = await sb.from('lieferwochen').select('*').eq('status', 'offen').order('woche_von', { ascending: false }).limit(1).single();
+  const { data: wocheArr } = await sb.from('lieferwochen').select('*').eq('status', 'offen').order('woche_von', { ascending: false }).limit(1);
+  const woche = wocheArr?.[0] || null;
   aktiveWoche = woche;
 
   if (!woche) {
@@ -1252,7 +1255,8 @@ async function shopLaden() {
   document.getElementById('deadline-text').textContent = 'Bestelldeadline: ' + datumZeit(woche.bestelldeadline);
   if (diffStunden < 24 && diffStunden > 0) document.getElementById('deadline-warnung').textContent = '⚠️ Noch ' + diffStunden + ' Stunden!';
 
-  const { data: kundeData } = await sb.from('kunden').select('id').eq('email', aktuellerNutzer.email).single();
+  const { data: kundeArr } = await sb.from('kunden').select('id').eq('email', aktuellerNutzer.email).limit(1);
+  const kundeData = kundeArr?.[0] || null;
   const kundeId = kundeData?.id;
 
   const { data: produkte } = await sb.from('produkte').select('*').eq('aktiv', true).order('name');
@@ -1317,7 +1321,8 @@ async function bestellungAbsenden() {
   if (!Object.keys(warenkorb).length) { toast('Der Warenkorb ist leer.', true); return; }
   if (!aktiveWoche) { toast('Keine offene Lieferwoche.', true); return; }
 
-  const { data: kundeData } = await sb.from('kunden').select('id').eq('email', aktuellerNutzer.email).single();
+  const { data: kundeArr } = await sb.from('kunden').select('id').eq('email', aktuellerNutzer.email).limit(1);
+  const kundeData = kundeArr?.[0] || null;
   const gesamt = Object.values(warenkorb).reduce((s, v) => s + v.menge * v.preis, 0);
 
   const { data: best, error } = await sb.from('bestellungen').insert({
@@ -1341,7 +1346,8 @@ async function bestellungAbsenden() {
 }
 
 async function meineBestellungenLaden() {
-  const { data: kundeData } = await sb.from('kunden').select('id').eq('email', aktuellerNutzer.email).single();
+  const { data: kundeArr } = await sb.from('kunden').select('id').eq('email', aktuellerNutzer.email).limit(1);
+  const kundeData = kundeArr?.[0] || null;
   if (!kundeData) return;
   const { data } = await sb.from('bestellungen').select('*, lieferwochen(woche_von, woche_bis)').eq('kunde_id', kundeData.id).order('erstellt_am', { ascending: false });
   const tbody = document.getElementById('meine-bestellungen-tabelle');
@@ -1359,10 +1365,14 @@ async function meineBestellungenLaden() {
 
 // ── START ──────────────────────────────────────────────────────
 (async () => {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    aktuellerNutzer = session.user;
-    await rolleErmitteln();
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      aktuellerNutzer = session.user;
+      await rolleErmitteln();
+    }
+  } catch(e) {
+    console.log('Session check failed:', e);
   }
 })();
 </script>
