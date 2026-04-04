@@ -1692,21 +1692,14 @@ async function aenderungenBestaetigen(bestellungId) {
 
   const aenderungsText = geaenderte.map(([posId, v]) => {
     const alt = bestellungBearbeitungState.original[posId];
-    if (v.menge === 0) return `• ${v.name}: entfernt`;
-    return `• ${v.name}: ${alt} → ${v.menge} ${v.einheit}`;
-  }).join('
-');
+    if (v.menge === 0) return '• ' + v.name + ': entfernt';
+    return '• ' + v.name + ': ' + alt + ' → ' + v.menge + ' ' + v.einheit;
+  }).join('\n');
 
   const neuesGesamt = Object.values(bestellungBearbeitungState.positionen)
     .reduce((s, v) => s + v.menge * v.preis, 0);
 
-  if (!confirm(`Folgende Änderungen übernehmen?
-
-${aenderungsText}
-
-Neue Gesamtsumme: ${euro(neuesGesamt)}
-
-Änderungen speichern?`)) return;
+  if (!confirm('Folgende Änderungen übernehmen?\n\n' + aenderungsText + '\n\nNeue Gesamtsumme: ' + euro(neuesGesamt) + '\n\nÄnderungen speichern?')) return;
 
   // In Datenbank speichern
   let fehler = false;
@@ -1730,9 +1723,7 @@ Neue Gesamtsumme: ${euro(neuesGesamt)}
 }
 
 async function bestellungStornierenMitBestaetigung(bestellungId) {
-  if (!confirm('Bestellung wirklich stornieren?
-
-Diese Aktion kann nicht rückgängig gemacht werden.')) return;
+  if (!confirm('Bestellung wirklich stornieren?\n\nDiese Aktion kann nicht rückgängig gemacht werden.')) return;
   const { error } = await sb.from('bestellungen').update({ status: 'storniert' }).eq('id', bestellungId);
   if (error) { toast('Fehler beim Stornieren.', true); return; }
   toast('Bestellung wurde storniert.');
