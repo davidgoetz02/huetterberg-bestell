@@ -78,7 +78,7 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
 .tabelle-container { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th { background: var(--gruen-bg); color: var(--gruen); font-weight: 600; padding: 10px 14px; text-align: left; border-bottom: 2px solid var(--gruen-sehr-hell); font-size: 13px; }
-td { padding: 10px 14px; border-bottom: 1px solid var(--grau-border); vertical-align: middle; }
+td { padding: 10px 14px; border-bottom: 1px solid var(--grau-border); vertical-align: middle; height: 60px; }
 tr:hover td { background: var(--grau-hell); }
 tr:last-child td { border-bottom: none; }
 
@@ -792,12 +792,15 @@ async function produkteLaden() {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--grau);padding:24px;">Noch keine Produkte angelegt.</td></tr>';
     return;
   }
+  const emojiMapAdmin = {'Tomaten':'🍅','Zucchini':'🥒','Karotten':'🥕','Erdbeeren':'🍓','Paprika (rot)':'🫑','Spinat':'🥬','Gurken':'🥒','Salat (Lollo Rosso)':'🥬','Kresse':'🌿','Basilikum':'🌿','Radieschen':'🌱','Kohlrabi':'🥦'};
   tbody.innerHTML = alleProdukte.map(p => `
-    <tr>
-      <td>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div style="width:40px;height:40px;border-radius:8px;overflow:hidden;background:var(--gruen-bg);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
-            ${p.bild_url ? `<img src="${p.bild_url}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'🌿\'">` : (({'Tomaten':'🍅','Zucchini':'🥒','Karotten':'🥕','Erdbeeren':'🍓','Paprika (rot)':'🫑','Spinat':'🥬','Gurken':'🥒','Salat (Lollo Rosso)':'🥬','Kresse':'🌿','Basilikum':'🌿','Radieschen':'🌱','Kohlrabi':'🥦'})[p.name] || '🌿')}
+    <tr style="height:60px;">
+      <td style="padding:8px 14px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:44px;height:44px;border-radius:8px;overflow:hidden;background:var(--gruen-bg);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">
+            ${p.bild_url
+              ? '<img src="' + p.bild_url + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display=\'none\'">'
+              : (emojiMapAdmin[p.name] || '🌿')}
           </div>
           <strong>${p.name}</strong>
         </div>
@@ -867,7 +870,7 @@ async function produktSpeichern() {
     ? await sb.from('produkte').update(daten).eq('id', id)
     : await sb.from('produkte').insert(daten);
 
-  if (error) { toast('Fehler beim Speichern: ' + error.message, true); return; }
+  if (error) { toast('Fehler: ' + error.message, true); console.error('Produkt Fehler:', error); return; }
   toast(id ? 'Produkt aktualisiert.' : 'Produkt angelegt.');
   modalSchliessen('produkt-modal');
   produkteLaden();
@@ -951,21 +954,30 @@ async function kundeSpeichern() {
   if (!id && !passwort) { toast('Bitte ein Passwort für den neuen Kunden eingeben.', true); return; }
 
   if (!id) {
-    const { data: authData, error: authErr } = await sb.auth.admin
-      ? await sb.auth.signUp({ email, password: passwort })
-      : await sb.auth.signUp({ email, password: passwort });
-    if (authErr && !authErr.message.includes('already')) {
-      toast('Auth-Fehler: ' + authErr.message, true); return;
+    // Neuen Auth-User anlegen
+    const { data: signUpData, error: authErr } = await sb.auth.signUp({ email, password: passwort });
+    if (authErr && !authErr.message.includes('already registered')) {
+      toast('Login-Fehler: ' + authErr.message, true); return;
     }
+    // Kunden-Eintrag anlegen
+    const { error: insertErr } = await sb.from('kunden').insert(daten);
+    if (insertErr) { toast('Fehler: ' + insertErr.message, true); return; }
+    // Rolle setzen wenn User-ID vorhanden
+    if (signUpData?.user?.id) {
+      await sb.from('nutzer_rollen').upsert({ nutzer_id: signUpData.user.id, rolle: 'kunde' }, { onConflict: 'nutzer_id' });
+    }
+    toast('Kunde angelegt! Login: ' + email);
+    modalSchliessen('kunde-modal');
+    kundeFormularLeeren();
+    kundenLaden();
+    return;
   }
 
-  const { error } = id
-    ? await sb.from('kunden').update(daten).eq('id', id)
-    : await sb.from('kunden').insert(daten);
-
+  const { error } = await sb.from('kunden').update(daten).eq('id', id);
   if (error) { toast('Fehler: ' + error.message, true); return; }
-  toast(id ? 'Kunde aktualisiert.' : 'Kunde angelegt. Der Kunde kann sich jetzt einloggen.');
+  toast('Kunde aktualisiert.');
   modalSchliessen('kunde-modal');
+  kundeFormularLeeren();
   kundenLaden();
 }
 
@@ -1363,8 +1375,10 @@ async function shopLaden() {
     };
     const emoji = emojis[p.name] || '🌿';
     const bildHtml = p.bild_url
-      ? `<img src="${p.bild_url}" style="width:100%;height:100%;object-fit:cover;" alt="${p.name}" onerror="this.parentElement.innerHTML='${emoji}'">`
-      : emoji;
+      ? `<img src="${p.bild_url}" style="width:100%;height:100%;object-fit:cover;" alt="${p.name}">`
+      : `<span style="font-size:48px">${emoji}</span>`;
+    const aktMenge = (warenkorb[p.id] && warenkorb[p.id].menge) || 0;
+    const pid = p.id;
     return `<div class="produkt-karte">
       <div class="produkt-bild">${bildHtml}</div>
       <div class="produkt-info">
@@ -1372,9 +1386,9 @@ async function shopLaden() {
         <div class="produkt-einheit">pro ${p.einheit}</div>
         <div class="produkt-preis">${euro(preis)}</div>
         <div class="produkt-menge">
-          <button class="menge-btn" onclick="mengeAendern('${p.id}', -1, ${preis})">−</button>
-          <span class="menge-anzeige" id="menge-${p.id}">${warenkorb[p.id]?.menge || 0}</span>
-          <button class="menge-btn" onclick="mengeAendern('${p.id}', 1, ${preis})">+</button>
+          <button class="menge-btn" onclick="mengeAendern(this.dataset.id, -1, ${preis})" data-id="${pid}">&#8722;</button>
+          <span class="menge-anzeige" id="menge-${pid}">${aktMenge}</span>
+          <button class="menge-btn" onclick="mengeAendern(this.dataset.id, 1, ${preis})" data-id="${pid}">&#43;</button>
         </div>
       </div>
     </div>`;
@@ -1382,6 +1396,7 @@ async function shopLaden() {
 }
 
 function mengeAendern(produktId, delta, preis) {
+  if (!produktId) return;
   if (!aktiveWoche) { toast('Keine offene Bestellwoche.', true); return; }
   const jetzt = new Date();
   if (aktiveWoche.bestelldeadline && new Date(aktiveWoche.bestelldeadline) < jetzt) {
@@ -1693,7 +1708,7 @@ async function aenderungenBestaetigen(bestellungId) {
   const aenderungsText = geaenderte.map(([posId, v]) => {
     const alt = bestellungBearbeitungState.original[posId];
     if (v.menge === 0) return '• ' + v.name + ': entfernt';
-    return '• ' + v.name + ': ' + alt + ' → ' + v.menge + ' ' + v.einheit;
+    return '• ' + v.name + ': ' + alt + ' -> ' + v.menge + ' ' + v.einheit;
   }).join('\n');
 
   const neuesGesamt = Object.values(bestellungBearbeitungState.positionen)
