@@ -125,7 +125,10 @@ tr:last-child td { border-bottom: none; }
 .produkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
 .produkt-karte { background: var(--weiss); border-radius: 12px; border: 1px solid var(--grau-border); overflow: hidden; transition: box-shadow 0.2s; }
 .produkt-karte:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
-.produkt-bild { height: 140px; background: var(--gruen-bg); display: flex; align-items: center; justify-content: center; font-size: 48px; }
+.produkt-bild { height: 140px; background: var(--gruen-bg); display: flex; align-items: center; justify-content: center; font-size: 48px; overflow:hidden; }
+.produkt-bild img { width:100%; height:100%; object-fit:cover; display:block; }
+.detail-hinweis { background: var(--gruen-bg); border: 1px solid var(--gruen-sehr-hell); border-radius: 8px; padding: 10px 14px; margin: 12px 0; font-size: 13px; }
+.detail-aktionen-inline { display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-top:16px; padding-top:12px; border-top:1px solid var(--grau-border); }
 .produkt-info { padding: 14px; }
 .produkt-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
 .produkt-einheit { font-size: 12px; color: var(--grau); margin-bottom: 8px; }
@@ -199,6 +202,7 @@ tr:last-child td { border-bottom: none; }
     <div class="navbar-logo"><span>🌿</span> Hütterberg Admin</div>
     <div class="navbar-rechts">
       <span class="navbar-user" id="admin-user-name"></span>
+      <button class="btn-abmelden" onclick="modalOeffnen('passwort-modal')">Passwort ändern</button>
       <button class="btn-abmelden" onclick="abmelden()">Abmelden</button>
     </div>
   </div>
@@ -257,7 +261,7 @@ tr:last-child td { border-bottom: none; }
               <tr><th>Kunde</th><th>Lieferwoche</th><th>Quelle</th><th>Gesamt (netto)</th><th>Status</th><th>Aktionen</th></tr>
             </thead>
             <tbody id="bestellungen-tabelle">
-              <tr><td colspan="6" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
+              <tr><td colspan="7" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
             </tbody>
           </table>
         </div>
@@ -274,7 +278,7 @@ tr:last-child td { border-bottom: none; }
         <div class="tabelle-container">
           <table>
             <thead>
-              <tr><th>Name</th><th>Einheit</th><th>Basispreis (netto)</th><th>Kategorie</th><th>Status</th><th>Aktionen</th></tr>
+              <tr><th>Bild</th><th>Name</th><th>Einheit</th><th>Basispreis (netto)</th><th>Kategorie</th><th>Status</th><th>Aktionen</th></tr>
             </thead>
             <tbody id="produkte-tabelle">
               <tr><td colspan="6" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
@@ -355,6 +359,7 @@ tr:last-child td { border-bottom: none; }
     <div class="navbar-logo"><span>🌿</span> Hütterberg Shop</div>
     <div class="navbar-rechts">
       <span class="navbar-user" id="kunden-user-name"></span>
+      <button class="btn-abmelden" onclick="modalOeffnen('passwort-modal')">Passwort ändern</button>
       <button class="btn-abmelden" onclick="abmelden()">Abmelden</button>
     </div>
   </div>
@@ -434,6 +439,7 @@ tr:last-child td { border-bottom: none; }
       <div class="feld"><label>Verfügbar von</label><input type="date" id="p-verfuegbar-von" /></div>
       <div class="feld"><label>Verfügbar bis</label><input type="date" id="p-verfuegbar-bis" /></div>
       <div class="feld"><label>Max. Menge</label><input type="number" id="p-max-menge" placeholder="Leer = unbegrenzt" /></div>
+      <div class="feld"><label>Bild-URL</label><input type="url" id="p-bild-url" placeholder="https://..." /></div>
       <div class="feld"><label>Status</label>
         <select id="p-status">
           <option value="true">Aktiv</option>
@@ -776,11 +782,12 @@ async function produkteLaden() {
   alleProdukte = data || [];
   const tbody = document.getElementById('produkte-tabelle');
   if (!alleProdukte.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--grau);padding:24px;">Noch keine Produkte angelegt.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--grau);padding:24px;">Noch keine Produkte angelegt.</td></tr>';
     return;
   }
   tbody.innerHTML = alleProdukte.map(p => `
     <tr>
+      <td>${p.bild_url ? `<img src="${p.bild_url}" alt="${p.name}" style="width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid var(--grau-border);">` : '<span style="font-size:24px;">🌿</span>'}</td>
       <td><strong>${p.name}</strong></td>
       <td>${p.einheit}</td>
       <td>${euro(p.basispreis_netto)}</td>
@@ -794,7 +801,7 @@ async function produkteLaden() {
 }
 
 function produktFormularLeeren() {
-  ['produkt-id','p-name','p-preis','p-kategorie','p-beschreibung','p-verfuegbar-von','p-verfuegbar-bis','p-max-menge'].forEach(id => document.getElementById(id).value = '');
+  ['produkt-id','p-name','p-preis','p-kategorie','p-beschreibung','p-verfuegbar-von','p-verfuegbar-bis','p-max-menge','p-bild-url'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('p-einheit').value = 'kg';
   document.getElementById('p-status').value = 'true';
   document.getElementById('produkt-modal-titel').textContent = 'Neues Produkt';
@@ -812,6 +819,7 @@ async function produktBearbeiten(id) {
   document.getElementById('p-verfuegbar-von').value = p.verfuegbar_von ? p.verfuegbar_von.substring(0,10) : '';
   document.getElementById('p-verfuegbar-bis').value = p.verfuegbar_bis ? p.verfuegbar_bis.substring(0,10) : '';
   document.getElementById('p-max-menge').value = p.max_menge || '';
+  document.getElementById('p-bild-url').value = p.bild_url || '';
   document.getElementById('p-status').value = String(p.aktiv);
   document.getElementById('produkt-modal-titel').textContent = 'Produkt bearbeiten';
   modalOeffnen('produkt-modal');
@@ -828,6 +836,7 @@ async function produktSpeichern() {
     verfuegbar_von: document.getElementById('p-verfuegbar-von').value || null,
     verfuegbar_bis: document.getElementById('p-verfuegbar-bis').value || null,
     max_menge: parseFloat(document.getElementById('p-max-menge').value) || null,
+    bild_url: document.getElementById('p-bild-url').value.trim() || null,
     aktiv: document.getElementById('p-status').value === 'true',
   };
   if (!daten.name) { toast('Bitte einen Namen eingeben.', true); return; }
@@ -1068,6 +1077,7 @@ async function bestellungenLaden() {
         </select>
       </td>
       <td>
+        <button class="btn btn-gruen-outline btn-klein" onclick="adminBestellungDetail('${b.id}')">🔍 Details</button>
         <button class="btn btn-gruen-outline btn-klein" onclick="lieferscheinDrucken('${b.id}')">🖨️ Lieferschein</button>
       </td>
     </tr>`).join('');
@@ -1255,6 +1265,45 @@ async function rechnungCsvExport(rId) {
   link.click();
 }
 
+async function adminBestellungDetail(bestellungId) {
+  const { data: b } = await sb.from('bestellungen')
+    .select('*, kunden(name), lieferwochen(*), bestellpositionen(*, produkte(name, einheit))')
+    .eq('id', bestellungId).single();
+  if (!b) return;
+
+  document.getElementById('detail-modal-titel').textContent = '🔍 Bestelldetails';
+  const zeilen = (b.bestellpositionen || []).map(p => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border)">${p.produkte?.name || '–'}</td>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:center"><strong>${p.menge} ${p.produkte?.einheit || ''}</strong></td>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:right">${euro(p.preis_netto)}</td>
+      <td style="padding:10px 0;border-bottom:1px solid var(--grau-border);text-align:right;font-weight:700">${euro(p.gesamt_netto)}</td>
+    </tr>`).join('');
+
+  document.getElementById('detail-modal-inhalt').innerHTML = `
+    <div class="detail-hinweis">
+      <strong>Kunde:</strong> ${b.kunden?.name || '–'}<br>
+      <strong>Lieferwoche:</strong> ${wochenLabel(b.lieferwochen)}<br>
+      <strong>Status:</strong> ${b.status} &nbsp;|&nbsp; <strong>Quelle:</strong> ${b.quelle}
+    </div>
+    <table style="width:100%;font-size:14px;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Produkt</th>
+        <th style="text-align:center;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Menge</th>
+        <th style="text-align:right;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Preis</th>
+        <th style="text-align:right;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Gesamt</th>
+      </tr></thead>
+      <tbody>${zeilen}</tbody>
+    </table>
+    <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:10px;border-top:2px solid var(--gruen)">
+      <span style="font-weight:600">Gesamtsumme netto</span>
+      <span style="font-size:20px;font-weight:700;color:var(--gruen)">${euro(b.gesamt_netto)}</span>
+    </div>`;
+
+  document.getElementById('detail-modal-fuss').innerHTML = `<button class="btn btn-grau" onclick="modalSchliessen('detail-modal')">Schließen</button>`;
+  modalOeffnen('detail-modal');
+}
+
 // ── LIEFERSCHEIN DRUCKEN ───────────────────────────────────────
 async function lieferscheinDrucken(id) {
   const { data: b } = await sb.from('bestellungen').select('*, kunden(*), lieferwochen(*), bestellpositionen(*, produkte(name, einheit))').eq('id', id).single();
@@ -1330,9 +1379,10 @@ async function shopLaden() {
       'Äpfel':'🍎','Birnen':'🍐','Zwiebeln':'🧅','Knoblauch':'🧄',
       'Kartoffeln':'🥔','Mais':'🌽','Brokkoli':'🥦','Blumenkohl':'🤍'
     };
-    const emoji = p.bildUrl || emojis[p.name] || '🌿';
+    const emoji = emojis[p.name] || '🌿';
+    const bild = p.bild_url ? `<img src="${p.bild_url}" alt="${p.name}" loading="lazy">` : emoji;
     return `<div class="produkt-karte">
-      <div class="produkt-bild">${emoji}</div>
+      <div class="produkt-bild">${bild}</div>
       <div class="produkt-info">
         <div class="produkt-name">${p.name}</div>
         <div class="produkt-einheit">pro ${p.einheit}</div>
@@ -1407,7 +1457,7 @@ async function meineBestellungenLaden() {
   const { data } = await sb.from('bestellungen').select('*, lieferwochen(woche_von, woche_bis)').eq('kunde_id', kundeData.id).order('erstellt_am', { ascending: false });
   const tbody = document.getElementById('meine-bestellungen-tabelle');
   if (!data?.length) {
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--grau);padding:24px;">Noch keine Bestellungen.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--grau);padding:24px;">Noch keine Bestellungen.</td></tr>';
     return;
   }
   tbody.innerHTML = data.map(b => `
@@ -1465,7 +1515,6 @@ function zusammenfassungZeigen() {
       <span style="font-size:22px;font-weight:700;color:var(--gruen)">${euro(gesamt)}</span>
     </div>
     <p style="font-size:12px;color:var(--grau);margin-top:8px;">Pauschalierter Betrieb – kein Steuerausweis</p>`;
-  modalSchliessen('zusammenfassung-modal');
   modalOeffnen('zusammenfassung-modal');
 }
 
@@ -1524,7 +1573,21 @@ async function bestellungDetailZeigen(bestellungId, status) {
     <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:10px;border-top:2px solid var(--gruen)">
       <span style="font-weight:600">Gesamtsumme netto</span>
       <span style="font-size:20px;font-weight:700;color:var(--gruen)" id="detail-gesamt">${euro(gesamt)}</span>
-    </div>`;
+    </div>
+    ${bearbeitbar && !deadlineVorbei ? `
+      <div class="detail-aktionen-inline">
+        <div style="flex:1;min-width:220px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--text-leicht);margin-bottom:6px;">Weiteres Produkt hinzufügen</label>
+          <select id="detail-neues-produkt" style="width:100%;padding:9px 12px;border:1.5px solid var(--grau-border);border-radius:7px;">
+            ${alleProdukte.filter(p => p.aktiv).map(p => `<option value="${p.id}">${p.name} (${p.einheit})</option>`).join('')}
+          </select>
+        </div>
+        <div style="width:120px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--text-leicht);margin-bottom:6px;">Menge</label>
+          <input id="detail-neue-menge" type="number" min="0.1" step="0.1" style="width:100%;padding:9px 12px;border:1.5px solid var(--grau-border);border-radius:7px;" placeholder="0,0">
+        </div>
+        <button class="btn btn-gruen-outline" onclick="bestellungPositionNeuHinzufuegen('${bestellungId}')">+ Hinzufügen</button>
+      </div>` : ''}`;
 
   const fuss = document.getElementById('detail-modal-fuss');
   if (bearbeitbar && !deadlineVorbei) {
@@ -1539,7 +1602,9 @@ async function bestellungDetailZeigen(bestellungId, status) {
 }
 
 async function positionMengeAendern(bestellungId, positionId, produktId, aktMenge, delta, preis) {
-  const neueMenge = Math.max(0, parseFloat(aktMenge) + delta);
+  const mengeEl = document.getElementById('pos-menge-' + positionId);
+  const aktuelleMenge = parseFloat(mengeEl?.textContent || aktMenge || 0);
+  const neueMenge = Math.max(0, aktuelleMenge + delta);
   if (neueMenge === 0) {
     if (!confirm('Position entfernen?')) return;
     await sb.from('bestellpositionen').delete().eq('id', positionId);
@@ -1548,22 +1613,58 @@ async function positionMengeAendern(bestellungId, positionId, produktId, aktMeng
       menge: neueMenge,
       gesamt_netto: neueMenge * preis
     }).eq('id', positionId);
-    const mengeEl = document.getElementById('pos-menge-' + positionId);
     const gesamtEl = document.getElementById('pos-gesamt-' + positionId);
     if (mengeEl) mengeEl.textContent = neueMenge;
     if (gesamtEl) gesamtEl.textContent = euro(neueMenge * preis);
   }
-  // Gesamtsumme neu berechnen
+  await bestellungGesamtNeuBerechnen(bestellungId);
+  toast('Bestellung aktualisiert.');
+  await bestellungDetailZeigen(bestellungId, 'eingegangen');
+  await meineBestellungenLaden();
+}
+
+async function bestellungPositionNeuHinzufuegen(bestellungId) {
+  const produktId = document.getElementById('detail-neues-produkt').value;
+  const menge = parseFloat(document.getElementById('detail-neue-menge').value);
+  if (!produktId || !menge || menge <= 0) { toast('Bitte Produkt und Menge eingeben.', true); return; }
+
+  const produkt = alleProdukte.find(p => p.id === produktId);
+  if (!produkt) { toast('Produkt nicht gefunden.', true); return; }
+
+  const { data: bestellung } = await sb.from('bestellungen').select('kunde_id').eq('id', bestellungId).single();
+  let preis = parseFloat(produkt.basispreis_netto || 0);
+  if (bestellung?.kunde_id) {
+    const { data: kundenpreis } = await sb.from('kundenpreise').select('preis_netto').eq('kunde_id', bestellung.kunde_id).eq('produkt_id', produktId).maybeSingle();
+    if (kundenpreis?.preis_netto !== undefined && kundenpreis?.preis_netto !== null) preis = parseFloat(kundenpreis.preis_netto);
+  }
+
+  const { data: vorhandene } = await sb.from('bestellpositionen').select('*').eq('bestellung_id', bestellungId).eq('produkt_id', produktId).maybeSingle();
+  if (vorhandene) {
+    const neueMenge = parseFloat(vorhandene.menge) + menge;
+    await sb.from('bestellpositionen').update({ menge: neueMenge, gesamt_netto: neueMenge * preis }).eq('id', vorhandene.id);
+  } else {
+    await sb.from('bestellpositionen').insert({
+      bestellung_id: bestellungId,
+      produkt_id: produktId,
+      menge,
+      preis_netto: preis,
+      gesamt_netto: menge * preis
+    });
+  }
+
+  document.getElementById('detail-neue-menge').value = '';
+  await bestellungGesamtNeuBerechnen(bestellungId);
+  toast('Produkt zur Bestellung hinzugefügt.');
+  await bestellungDetailZeigen(bestellungId, 'eingegangen');
+  await meineBestellungenLaden();
+}
+
+async function bestellungGesamtNeuBerechnen(bestellungId) {
   const { data: positionen } = await sb.from('bestellpositionen').select('gesamt_netto').eq('bestellung_id', bestellungId);
-  const neuesGesamt = (positionen || []).reduce((s, p) => s + parseFloat(p.gesamt_netto), 0);
+  const neuesGesamt = (positionen || []).reduce((s, p) => s + parseFloat(p.gesamt_netto || 0), 0);
   await sb.from('bestellungen').update({ gesamt_netto: neuesGesamt }).eq('id', bestellungId);
   const gesamtEl2 = document.getElementById('detail-gesamt');
   if (gesamtEl2) gesamtEl2.textContent = euro(neuesGesamt);
-  toast('Bestellung aktualisiert.');
-  if (neueMenge === 0) {
-    modalSchliessen('detail-modal');
-    await meineBestellungenLaden();
-  }
 }
 
 async function bestellungStornieren(bestellungId) {
