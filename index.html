@@ -164,6 +164,21 @@ tr:last-child td { border-bottom: none; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .tab-btn { padding: 12px 14px; font-size: 13px; }
 }
+
+/* ── Kanban ── */
+.kanban-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; align-items: start; }
+.kanban-spalte { background: var(--grau-hell); border-radius: 12px; padding: 12px; min-height: 200px; }
+.kanban-kopf { font-size: 13px; font-weight: 700; padding: 6px 10px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+.kanban-karte { background: var(--weiss); border-radius: 9px; border: 1px solid var(--grau-border); padding: 12px; margin-bottom: 8px; cursor: pointer; transition: box-shadow 0.15s; }
+.kanban-karte:hover { box-shadow: 0 3px 12px rgba(0,0,0,0.1); }
+.kanban-karte-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.kanban-karte-info { font-size: 12px; color: var(--grau); margin-bottom: 6px; }
+.kanban-karte-summe { font-size: 14px; font-weight: 700; color: var(--gruen); }
+.kanban-karte-quelle { font-size: 11px; }
+/* ── Lager ── */
+.lager-balken-wrap { height: 8px; background: var(--grau-border); border-radius: 4px; margin-top: 6px; overflow: hidden; }
+.lager-balken { height: 100%; border-radius: 4px; transition: width 0.3s; }
+
 </style>
 </head>
 <body>
@@ -211,6 +226,7 @@ tr:last-child td { border-bottom: none; }
     <button class="tab-btn" onclick="tabWechseln('kunden', this)">👥 Kunden</button>
     <button class="tab-btn" onclick="tabWechseln('lieferwochen', this)">📅 Lieferwochen</button>
     <button class="tab-btn" onclick="tabWechseln('rechnungen', this)">🧾 Rechnungen</button>
+    <button class="tab-btn" onclick="tabWechseln('kanban', this)">📋 Kanban</button>
   </div>
 
   <div class="haupt">
@@ -275,7 +291,7 @@ tr:last-child td { border-bottom: none; }
         <div class="tabelle-container">
           <table>
             <thead>
-              <tr><th>Name</th><th>Einheit</th><th>Basispreis (netto)</th><th>Kategorie</th><th>Status</th><th>Aktionen</th></tr>
+              <tr><th>Name</th><th>Einheit</th><th>Basispreis (netto)</th><th>Kategorie</th><th>Lager</th><th>Status</th><th>Aktionen</th></tr>
             </thead>
             <tbody id="produkte-tabelle">
               <tr><td colspan="6" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
@@ -295,7 +311,7 @@ tr:last-child td { border-bottom: none; }
         <div class="tabelle-container">
           <table>
             <thead>
-              <tr><th>Name</th><th>Kontakt</th><th>E-Mail</th><th>Telefon</th><th>Status</th><th>Aktionen</th></tr>
+              <tr><th>Name / E-Mail</th><th>Kontakt</th><th>Telefon</th><th>Status</th><th>Aktionen</th></tr>
             </thead>
             <tbody id="kunden-tabelle">
               <tr><td colspan="6" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
@@ -447,7 +463,8 @@ tr:last-child td { border-bottom: none; }
       </div>
       <div class="feld"><label>Verfügbar von</label><input type="date" id="p-verfuegbar-von" /></div>
       <div class="feld"><label>Verfügbar bis</label><input type="date" id="p-verfuegbar-bis" /></div>
-      <div class="feld"><label>Max. Menge</label><input type="number" id="p-max-menge" placeholder="Leer = unbegrenzt" /></div>
+      <div class="feld"><label>Lagerbestand (verfügbare Menge)</label><input type="number" id="p-lager" step="0.01" placeholder="Leer = unbegrenzt" /></div>
+      <div class="feld"><label>Bereits reserviert</label><input type="number" id="p-reserviert" step="0.01" placeholder="0" readonly style="background:var(--grau-hell);color:var(--grau)" /></div>
       <div class="feld"><label>Status</label>
         <select id="p-status">
           <option value="true">Aktiv</option>
@@ -608,6 +625,22 @@ tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
+
+<!-- Kunden-Detail Modal -->
+<div id="kunde-detail-modal" class="modal-overlay">
+  <div class="modal" style="max-width:800px;width:95vw;">
+    <div class="modal-kopf">
+      <h2 id="kunde-detail-titel">Kunde</h2>
+      <button class="modal-schliessen" onclick="modalSchliessen('kunde-detail-modal')">×</button>
+    </div>
+    <div id="kunde-detail-inhalt"></div>
+    <div class="modal-fuss">
+      <button class="btn btn-gruen-outline" onclick="kundeBearbeitenAusDetail()">✏️ Bearbeiten</button>
+      <button class="btn btn-grau" onclick="modalSchliessen('kunde-detail-modal')">Schließen</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast" class="toast"></div>
 
@@ -670,6 +703,7 @@ function tabWechseln(id, btn) {
   if (id === 'lieferwochen') wochenLaden();
   if (id === 'rechnungen') rechnungenLaden();
   if (id === 'uebersicht') uebersichtLaden();
+  if (id === 'kanban') kanbanLaden();
   if (id === 'meine-bestellungen') meineBestellungenLaden();
 }
 function modalOeffnen(id) {
@@ -809,6 +843,16 @@ async function produkteLaden() {
       <td>${p.einheit}</td>
       <td>${euro(p.basispreis_netto)}</td>
       <td><span class="badge badge-grau">${p.kategorie || '–'}</span></td>
+      <td>
+        ${p.lager_menge != null ? (() => {
+          const reserviert = p.reserviert || 0;
+          const verfuegbar = Math.max(0, p.lager_menge - reserviert);
+          const pct = p.lager_menge > 0 ? Math.round((reserviert / p.lager_menge) * 100) : 0;
+          const farbe = pct > 80 ? '#e63946' : pct > 50 ? '#e67e22' : '#2d6a4f';
+          return '<span style="font-size:12px;font-weight:600;color:' + farbe + '">' + verfuegbar.toFixed(1) + ' / ' + p.lager_menge + ' ' + p.einheit + '</span>' +
+            '<div class="lager-balken-wrap"><div class="lager-balken" style="width:' + pct + '%;background:' + farbe + '"></div></div>';
+        })() : '<span style="color:var(--grau);font-size:12px;">∞ unbegrenzt</span>'}
+      </td>
       <td><span class="badge ${p.aktiv ? 'badge-gruen' : 'badge-rot'}">${p.aktiv ? 'Aktiv' : 'Inaktiv'}</span></td>
       <td style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="btn btn-gruen-outline btn-klein" onclick="produktBearbeiten('${p.id}')">✏️ Bearbeiten</button>
@@ -818,7 +862,7 @@ async function produkteLaden() {
 }
 
 function produktFormularLeeren() {
-  ['produkt-id','p-name','p-preis','p-kategorie','p-beschreibung','p-verfuegbar-von','p-verfuegbar-bis','p-max-menge','p-foto-url'].forEach(id => document.getElementById(id).value = '');
+  ['produkt-id','p-name','p-preis','p-kategorie','p-beschreibung','p-verfuegbar-von','p-verfuegbar-bis','p-lager','p-reserviert','p-foto-url'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   document.getElementById('p-einheit').value = 'kg';
   document.getElementById('p-status').value = 'true';
   document.getElementById('produkt-modal-titel').textContent = 'Neues Produkt';
@@ -836,6 +880,8 @@ async function produktBearbeiten(id) {
   document.getElementById('p-kategorie').value = p.kategorie || '';
   document.getElementById('p-beschreibung').value = p.beschreibung || '';
   document.getElementById('p-foto-url').value = p.bild_url || '';
+  document.getElementById('p-lager').value = p.lager_menge || '';
+  document.getElementById('p-reserviert').value = p.reserviert ? parseFloat(p.reserviert).toFixed(2) : '0';
   const vorschau = document.getElementById('p-foto-vorschau');
   if (p.bild_url) {
     vorschau.innerHTML = `<img src="${p.bild_url}" style="width:100%;height:100%;object-fit:cover;">`;
@@ -860,6 +906,7 @@ async function produktSpeichern() {
     kategorie: document.getElementById('p-kategorie').value.trim() || null,
     beschreibung: document.getElementById('p-beschreibung').value.trim() || null,
     bild_url: document.getElementById('p-foto-url').value || null,
+    lager_menge: parseFloat(document.getElementById('p-lager').value) || null,
     verfuegbar_von: document.getElementById('p-verfuegbar-von').value || null,
     verfuegbar_bis: document.getElementById('p-verfuegbar-bis').value || null,
     max_menge: parseFloat(document.getElementById('p-max-menge').value) || null,
@@ -902,15 +949,15 @@ async function kundenLaden() {
     return;
   }
   tbody.innerHTML = alleKunden.map(k => `
-    <tr>
-      <td><strong>${k.name}</strong></td>
+    <tr style="cursor:pointer" onclick="kundeDetailOeffnen('${k.id}')">
+      <td><strong>${k.name}</strong><br><span style="font-size:12px;color:var(--grau)">${k.email}</span></td>
       <td>${k.kontaktperson || '–'}</td>
-      <td>${k.email}</td>
       <td>${k.telefon || '–'}</td>
       <td><span class="badge ${k.aktiv ? 'badge-gruen' : 'badge-rot'}">${k.aktiv ? 'Aktiv' : 'Inaktiv'}</span></td>
-      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+      <td style="display:flex;gap:6px;flex-wrap:wrap;" onclick="event.stopPropagation()">
+        <button class="btn btn-gruen-outline btn-klein" onclick="kundeDetailOeffnen('${k.id}')">👁️ Detail</button>
         <button class="btn btn-gruen-outline btn-klein" onclick="kundeBearbeiten('${k.id}')">✏️</button>
-        <button class="btn btn-blau btn-klein" onclick="preiseOeffnen('${k.id}', '${k.name}')" style="background:#e8f0fe;color:#1a56db;border:none;">💰 Preise</button>
+        <button class="btn btn-klein" onclick="preiseOeffnen('${k.id}', '${k.name}')" style="background:#e8f0fe;color:#1a56db;border:none;">💰 Preise</button>
       </td>
     </tr>`).join('');
 }
@@ -1358,6 +1405,18 @@ async function shopLaden() {
   const preisMap = {};
   (kundenpreise || []).forEach(p => { preisMap[p.produkt_id] = p.preis_netto; });
 
+  // Reservierte Mengen aus offenen Bestellungen laden
+  if (woche && (produkte || []).length > 0) {
+    const { data: offenePos } = await sb.from('bestellpositionen')
+      .select('produkt_id, menge, bestellungen!inner(lieferwoche_id, status)')
+      .eq('bestellungen.lieferwoche_id', woche.id)
+      .neq('bestellungen.status', 'storniert');
+    const reservMap = {};
+    (offenePos || []).forEach(p => {
+      reservMap[p.produkt_id] = (reservMap[p.produkt_id] || 0) + parseFloat(p.menge);
+    });
+    (produkte || []).forEach(p => { p.reserviert = reservMap[p.id] || 0; });
+  }
   alleProdukte = produkte || [];
   const container = document.getElementById('shop-produkte');
   if (!alleProdukte.length) {
@@ -1403,9 +1462,21 @@ function mengeAendern(produktId, delta, preis) {
   if (aktiveWoche.bestelldeadline && new Date(aktiveWoche.bestelldeadline) < jetzt) {
     toast('Die Bestelldeadline ist bereits abgelaufen.', true); return;
   }
-  const aktuell = warenkorb[produktId]?.menge || 0;
-  const neu = Math.max(0, aktuell + delta);
   const produkt = alleProdukte.find(p => p.id === produktId);
+  const aktuell = (warenkorb[produktId] && warenkorb[produktId].menge) || 0;
+  const neu = Math.max(0, aktuell + delta);
+
+  // Lager prüfen
+  if (delta > 0 && produkt && produkt.lager_menge != null) {
+    const reserviert = produkt.reserviert || 0;
+    const verfuegbar = produkt.lager_menge - reserviert;
+    const bereitsImKorb = aktuell;
+    if (neu > bereitsImKorb + verfuegbar) {
+      toast('Nur noch ' + (verfuegbar + bereitsImKorb).toFixed(1) + ' ' + (produkt.einheit||'') + ' verfügbar!', true);
+      return;
+    }
+  }
+
   if (neu === 0) delete warenkorb[produktId];
   else warenkorb[produktId] = { menge: neu, preis, name: produkt?.name, einheit: produkt?.einheit };
   const el = document.getElementById('menge-' + produktId);
@@ -1750,6 +1821,226 @@ async function bestellungStornierenMitBestaetigung(bestellungId) {
 
 
 
+
+
+// ── KANBAN BOARD ───────────────────────────────────────────────
+async function kanbanLaden() {
+  const wocheFilter = document.getElementById('kanban-woche-filter')?.value || '';
+  let query = sb.from('bestellungen')
+    .select('*, kunden(name), lieferwochen(woche_von, woche_bis)')
+    .order('erstellt_am', { ascending: true });
+  if (wocheFilter) query = query.eq('lieferwoche_id', wocheFilter);
+
+  const { data, error } = await query;
+  if (error) { toast('Fehler beim Laden.', true); return; }
+
+  const spalten = [
+    { status: 'eingegangen', label: 'Eingegangen', farbe: '#e67e22', bg: '#fef3e2' },
+    { status: 'bestaetigt',  label: 'Bestätigt',   farbe: '#1a56db', bg: '#e8f0fe' },
+    { status: 'geliefert',   label: 'Geliefert',   farbe: '#2d6a4f', bg: '#d8f3dc' },
+    { status: 'storniert',   label: 'Storniert',   farbe: '#c0392b', bg: '#fde8e8' },
+  ];
+
+  const gruppen = {};
+  spalten.forEach(s => { gruppen[s.status] = []; });
+  (data || []).forEach(b => {
+    if (gruppen[b.status]) gruppen[b.status].push(b);
+  });
+
+  const board = document.getElementById('kanban-board');
+  board.innerHTML = spalten.map(sp => {
+    const karten = gruppen[sp.status];
+    const kartenHTML = karten.length === 0
+      ? '<div style="text-align:center;padding:20px;color:var(--grau);font-size:13px;">Keine Bestellungen</div>'
+      : karten.map(b => `
+          <div class="kanban-karte" onclick="kanbanKarteKlick('${b.id}', '${b.status}')">
+            <div class="kanban-karte-name">${b.kunden?.name || '–'}</div>
+            <div class="kanban-karte-info">${wochenLabel(b.lieferwochen)}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="kanban-karte-summe">${euro(b.gesamt_netto)}</span>
+              <span class="kanban-karte-quelle badge ${b.quelle === 'telefon' ? 'badge-orange' : 'badge-blau'}">${b.quelle === 'telefon' ? '📞' : '🌐'}</span>
+            </div>
+            ${b.status === 'eingegangen' ? `
+            <div style="display:flex;gap:6px;margin-top:10px;padding-top:8px;border-top:1px solid var(--grau-border);">
+              <button class="btn btn-gruen btn-klein" style="flex:1" onclick="event.stopPropagation();kanbanStatusAendern('${b.id}','bestaetigt')">✓ Bestätigen</button>
+              <button class="btn btn-grau btn-klein" onclick="event.stopPropagation();kanbanStatusAendern('${b.id}','storniert')">✕</button>
+            </div>` : ''}
+            ${b.status === 'bestaetigt' ? `
+            <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--grau-border);">
+              <button class="btn btn-gruen btn-klein" style="width:100%" onclick="event.stopPropagation();kanbanStatusAendern('${b.id}','geliefert')">🚚 Als geliefert markieren</button>
+            </div>` : ''}
+          </div>`).join('');
+
+    return `<div class="kanban-spalte">
+      <div class="kanban-kopf" style="background:${sp.bg};color:${sp.farbe};">
+        <span>${sp.label}</span>
+        <span style="background:${sp.farbe};color:#fff;border-radius:20px;padding:2px 9px;font-size:12px;">${karten.length}</span>
+      </div>
+      ${kartenHTML}
+    </div>`;
+  }).join('');
+
+  // Wochenfilter befüllen
+  const kf = document.getElementById('kanban-woche-filter');
+  if (kf && alleWochen.length > 0 && kf.options.length <= 1) {
+    alleWochen.forEach(w => {
+      const opt = document.createElement('option');
+      opt.value = w.id;
+      opt.textContent = wochenLabel(w);
+      kf.appendChild(opt);
+    });
+  }
+}
+
+async function kanbanKarteKlick(id, status) {
+  const { data: b } = await sb.from('bestellungen')
+    .select('*, kunden(*), lieferwochen(*), bestellpositionen(*, produkte(name, einheit))')
+    .eq('id', id).single();
+  if (!b) return;
+  const zeilen = (b.bestellpositionen || []).map(p =>
+    `<tr><td style="padding:8px 0;border-bottom:1px solid var(--grau-border)">${p.produkte?.name}</td>
+     <td style="padding:8px 0;border-bottom:1px solid var(--grau-border);text-align:center">${p.menge} ${p.produkte?.einheit}</td>
+     <td style="padding:8px 0;border-bottom:1px solid var(--grau-border);text-align:right">${euro(p.gesamt_netto)}</td></tr>`
+  ).join('');
+  document.getElementById('detail-modal-titel').textContent = b.kunden?.name + ' — ' + wochenLabel(b.lieferwochen);
+  document.getElementById('detail-modal-inhalt').innerHTML = `
+    <div style="background:var(--gruen-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">
+      <strong>Kunde:</strong> ${b.kunden?.name} &nbsp;|&nbsp; <strong>Status:</strong> <span class="badge badge-orange">${b.status}</span><br>
+      <strong>Quelle:</strong> ${b.quelle === 'telefon' ? '📞 Telefon' : '🌐 Online'} &nbsp;|&nbsp; <strong>Notiz:</strong> ${b.notizen || '–'}
+    </div>
+    <table style="width:100%;font-size:14px;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Produkt</th>
+        <th style="text-align:center;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Menge</th>
+        <th style="text-align:right;padding:8px 0;color:var(--gruen);border-bottom:2px solid var(--gruen-sehr-hell)">Gesamt</th>
+      </tr></thead>
+      <tbody>${zeilen}</tbody>
+    </table>
+    <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:10px;border-top:2px solid var(--gruen)">
+      <span style="font-weight:600">Gesamtsumme netto</span>
+      <span style="font-size:20px;font-weight:700;color:var(--gruen)">${euro(b.gesamt_netto)}</span>
+    </div>`;
+  document.getElementById('detail-modal-fuss').innerHTML =
+    `<button class="btn btn-grau" onclick="modalSchliessen('detail-modal')">Schließen</button>
+     <button class="btn btn-gruen" onclick="lieferscheinDrucken('${b.id}')">🖨️ Lieferschein</button>`;
+  modalOeffnen('detail-modal');
+}
+
+async function kanbanStatusAendern(id, status) {
+  await sb.from('bestellungen').update({ status }).eq('id', id);
+  toast('Status auf "' + status + '" gesetzt.');
+  kanbanLaden();
+  uebersichtLaden();
+}
+
+// ── KUNDEN DETAIL ──────────────────────────────────────────────
+let kundeDetailAktuelleId = null;
+
+async function kundeDetailOeffnen(kundeId) {
+  kundeDetailAktuelleId = kundeId;
+  const kunde = alleKunden.find(k => k.id === kundeId);
+  if (!kunde) return;
+  document.getElementById('kunde-detail-titel').textContent = kunde.name;
+
+  // Alle Bestellungen des Kunden laden
+  const { data: bestellungen } = await sb.from('bestellungen')
+    .select('*, lieferwochen(woche_von, woche_bis), bestellpositionen(menge, preis_netto, gesamt_netto, produkte(name, einheit))')
+    .eq('kunde_id', kundeId)
+    .order('erstellt_am', { ascending: false });
+
+  const gesamt = (bestellungen || []).reduce((s, b) => s + parseFloat(b.gesamt_netto || 0), 0);
+  const anzahl = (bestellungen || []).length;
+  const geliefert = (bestellungen || []).filter(b => b.status === 'geliefert').length;
+
+  const { data: preise } = await sb.from('kundenpreise')
+    .select('*, produkte(name, einheit, basispreis_netto)')
+    .eq('kunde_id', kundeId);
+
+  const statusBadge = { 'eingegangen': 'badge-orange', 'bestaetigt': 'badge-blau', 'geliefert': 'badge-gruen', 'storniert': 'badge-rot' };
+
+  const bestellHistorie = (bestellungen || []).map(b => {
+    const positionen = (b.bestellpositionen || []).map(p =>
+      `<div style="font-size:12px;color:var(--grau);padding:3px 0 3px 12px;border-left:2px solid var(--gruen-sehr-hell);">
+        ${p.produkte?.name} — ${p.menge} ${p.produkte?.einheit} × ${euro(p.preis_netto)} = <strong>${euro(p.gesamt_netto)}</strong>
+      </div>`
+    ).join('');
+    return `
+      <div style="background:var(--weiss);border:1px solid var(--grau-border);border-radius:10px;padding:14px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+          <div>
+            <span style="font-weight:700;font-size:14px;">${wochenLabel(b.lieferwochen)}</span>
+            <span class="badge ${b.quelle === 'telefon' ? 'badge-orange' : 'badge-blau'}" style="margin-left:8px;font-size:11px;">${b.quelle === 'telefon' ? '📞 Telefon' : '🌐 Online'}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="badge ${statusBadge[b.status] || 'badge-grau'}">${b.status}</span>
+            <span style="font-size:16px;font-weight:700;color:var(--gruen)">${euro(b.gesamt_netto)}</span>
+            <button class="btn btn-gruen-outline btn-klein" onclick="lieferscheinDrucken('${b.id}')">🖨️</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px;">${positionen}</div>
+      </div>`;
+  }).join('') || '<div style="text-align:center;padding:24px;color:var(--grau);">Noch keine Bestellungen.</div>';
+
+  const indPreise = (preise || []).length > 0
+    ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+        ${preise.map(p => `<span style="background:var(--gruen-bg);padding:4px 10px;border-radius:6px;font-size:12px;">
+          <strong>${p.produkte?.name}</strong>: ${euro(p.preis_netto)} <span style="color:var(--grau)">(statt ${euro(p.produkte?.basispreis_netto)})</span>
+        </span>`).join('')}
+      </div>`
+    : '<p style="font-size:13px;color:var(--grau);margin-top:8px;">Keine individuellen Preise — Basispreise gelten.</p>';
+
+  document.getElementById('kunde-detail-inhalt').innerHTML = `
+    <!-- Stammdaten -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div style="background:var(--grau-hell);border-radius:8px;padding:12px;font-size:13px;">
+        <div style="color:var(--grau);margin-bottom:4px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em">Kontakt</div>
+        <div><strong>${kunde.kontaktperson || '–'}</strong></div>
+        <div>${kunde.email}</div>
+        <div>${kunde.telefon || '–'}</div>
+        <div>${kunde.adresse || '–'}</div>
+      </div>
+      <div style="background:var(--grau-hell);border-radius:8px;padding:12px;">
+        <div style="color:var(--grau);margin-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em">Statistik</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="background:var(--weiss);border-radius:6px;padding:8px;text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:var(--gruen)">${anzahl}</div>
+            <div style="font-size:11px;color:var(--grau)">Bestellungen</div>
+          </div>
+          <div style="background:var(--weiss);border-radius:6px;padding:8px;text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:var(--gruen)">${geliefert}</div>
+            <div style="font-size:11px;color:var(--grau)">Geliefert</div>
+          </div>
+          <div style="background:var(--weiss);border-radius:6px;padding:8px;text-align:center;grid-column:1/-1;">
+            <div style="font-size:18px;font-weight:700;color:var(--gruen)">${euro(gesamt)}</div>
+            <div style="font-size:11px;color:var(--grau)">Gesamtumsatz</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Individuelle Preise -->
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <strong style="font-size:14px;">💰 Individuelle Preise</strong>
+        <button class="btn btn-grau btn-klein" onclick="preiseOeffnen('${kundeId}','${kunde.name}')">Preise bearbeiten</button>
+      </div>
+      ${indPreise}
+    </div>
+
+    <!-- Bestellhistorie -->
+    <div>
+      <strong style="font-size:14px;display:block;margin-bottom:10px;">📦 Bestellhistorie (${anzahl} Bestellungen)</strong>
+      <div style="max-height:400px;overflow-y:auto;padding-right:4px;">${bestellHistorie}</div>
+    </div>`;
+
+  modalOeffnen('kunde-detail-modal');
+}
+
+function kundeBearbeitenAusDetail() {
+  if (!kundeDetailAktuelleId) return;
+  modalSchliessen('kunde-detail-modal');
+  kundeBearbeiten(kundeDetailAktuelleId);
+}
 
 // ── START ──────────────────────────────────────────────────────
 (async () => {
