@@ -122,7 +122,7 @@ tr:last-child td { border-bottom: none; }
 .modal-fuss { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--grau-border); }
 
 /* ── Shop (Kundenansicht) ── */
-.produkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.produkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; width: 100%; }
 .produkt-karte { background: var(--weiss); border-radius: 12px; border: 1px solid var(--grau-border); overflow: hidden; transition: box-shadow 0.2s; }
 .produkt-karte:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
 .produkt-bild { height: 140px; background: var(--gruen-bg); display: flex; align-items: center; justify-content: center; font-size: 48px; }
@@ -142,7 +142,7 @@ tr:last-child td { border-bottom: none; }
 .warenkorb-info span { font-size: 13px; font-weight: 400; opacity: 0.85; display: block; }
 
 /* ── Lieferwoche-Banner ── */
-.woche-banner { background: var(--gruen-bg); border: 1.5px solid var(--gruen-sehr-hell); border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: gap; }
+.woche-banner { background: var(--gruen-bg); border: 1.5px solid var(--gruen-sehr-hell); border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 .woche-banner .woche-info { font-size: 14px; color: var(--text-leicht); }
 .woche-banner .woche-info strong { color: var(--gruen); font-size: 16px; }
 .deadline-warnung { font-size: 13px; color: var(--orange); font-weight: 600; }
@@ -199,6 +199,7 @@ tr:last-child td { border-bottom: none; }
     <div class="navbar-logo"><span>🌿</span> Hütterberg Admin</div>
     <div class="navbar-rechts">
       <span class="navbar-user" id="admin-user-name"></span>
+      <button class="btn-abmelden" onclick="modalOeffnen('passwort-modal')" style="background:rgba(255,255,255,0.1);">🔑 Passwort</button>
       <button class="btn-abmelden" onclick="abmelden()">Abmelden</button>
     </div>
   </div>
@@ -353,9 +354,9 @@ tr:last-child td { border-bottom: none; }
 <div id="kunden-seite" class="seite">
   <div class="navbar">
     <div class="navbar-logo"><span>🌿</span> Hütterberg Shop</div>
-  <div class="navbar-rechts" id="kunden-navbar-rechts">
     <div class="navbar-rechts">
       <span class="navbar-user" id="kunden-user-name"></span>
+      <button class="btn-abmelden" onclick="modalOeffnen('passwort-modal')" style="background:rgba(255,255,255,0.1);">🔑 Passwort</button>
       <button class="btn-abmelden" onclick="abmelden()">Abmelden</button>
     </div>
   </div>
@@ -365,10 +366,10 @@ tr:last-child td { border-bottom: none; }
     <button class="tab-btn" onclick="tabWechseln('meine-bestellungen', this)">📦 Meine Bestellungen</button>
   </div>
 
-  <div class="haupt">
+  <div class="haupt" style="max-width:100%;padding:20px;">
 
     <!-- SHOP -->
-    <div id="tab-shop" class="tab-inhalt aktiv">
+    <div id="tab-shop" class="tab-inhalt aktiv" style="width:100%">
       <div class="woche-banner" id="woche-banner">
         <div class="woche-info">
           <strong id="aktive-woche-text">Keine aktive Lieferwoche</strong>
