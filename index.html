@@ -1266,18 +1266,33 @@ async function rechnungenLaden() {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--grau);padding:24px;">Noch keine Rechnungen erstellt.</td></tr>';
     return;
   }
-  tbody.innerHTML = data.map(r => `
-    <tr>
-      <td><strong>${r.nummer}</strong></td>
+  tbody.innerHTML = data.map(r => {
+    const istBezahlt = r.status === 'bezahlt';
+    const istStorniert = r.status === 'storniert';
+    const badgeKlasse = istBezahlt ? 'badge-gruen' : r.status === 'offen' ? 'badge-orange' : 'badge-grau';
+    return `<tr>
+      <td>
+        <strong>${r.nummer}</strong><br>
+        <span style="font-size:11px;color:var(--grau)">${r.erstellt_am ? datum(r.erstellt_am) : '–'}</span>
+      </td>
       <td>${r.kunden?.name || '–'}</td>
       <td>${r.monat}/${r.jahr}</td>
-      <td>${euro(r.gesamt_netto)}</td>
-      <td><span class="badge ${r.status==='bezahlt'?'badge-gruen':r.status==='offen'?'badge-orange':'badge-grau'}">${r.status}</span></td>
-      <td style="display:flex;gap:6px;">
-        <button class="btn btn-gruen-outline btn-klein" onclick="rechnungStatusAendern('${r.id}','bezahlt')">✓ Bezahlt</button>
-        <button class="btn btn-grau btn-klein" onclick="rechnungCsvExport('${r.id}')">↓ CSV</button>
+      <td style="font-weight:700">${euro(r.gesamt_netto)}</td>
+      <td><span class="badge ${badgeKlasse}">${r.status}</span></td>
+      <td>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          ${!istBezahlt && !istStorniert ? `
+            <button class="btn btn-gruen btn-klein" onclick="rechnungBezahltSetzen('${r.id}')">✓ Als bezahlt markieren</button>
+            <button class="btn btn-grau btn-klein" onclick="rechnungStatusAendern('${r.id}','storniert')">✕ Stornieren</button>
+          ` : ''}
+          ${istBezahlt ? `<span style="color:var(--gruen);font-size:13px;font-weight:600;">✓ Bezahlt</span>` : ''}
+          ${istStorniert ? `<span style="color:var(--grau);font-size:13px;">Storniert</span>` : ''}
+          <button class="btn btn-grau btn-klein" onclick="rechnungPdfDrucken('${r.id}')">🖨️ Drucken</button>
+          <button class="btn btn-grau btn-klein" onclick="rechnungCsvExport('${r.id}')">↓ CSV</button>
+        </div>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 
 async function rechnungErstellen() {
@@ -1314,8 +1329,16 @@ async function rechnungErstellen() {
 }
 
 async function rechnungStatusAendern(id, status) {
+  if (status === 'storniert' && !confirm('Rechnung wirklich stornieren?')) return;
   await sb.from('rechnungen').update({ status }).eq('id', id);
   toast('Status aktualisiert.');
+  rechnungenLaden();
+}
+
+async function rechnungBezahltSetzen(id) {
+  const heute = new Date().toISOString();
+  await sb.from('rechnungen').update({ status: 'bezahlt', bezahlt_am: heute }).eq('id', id);
+  toast('✅ Rechnung als bezahlt markiert.');
   rechnungenLaden();
 }
 
@@ -1348,16 +1371,50 @@ async function csvExport() {
 }
 
 async function rechnungCsvExport(rId) {
-  const { data: r } = await sb.from('rechnungen').select('*, kunden(name), rechnungspositionen(*)').eq('id', rId).single();
-  if (!r) return;
-  const zeilen = [['Rechnungsnr.','Kunde','Monat/Jahr','Gesamt netto','Status']];
-  zeilen.push([r.nummer, r.kunden?.name, r.monat+'/'+r.jahr, r.gesamt_netto, r.status]);
-  const csv = zeilen.map(row => row.map(v => '"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
-  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const { data: r } = await sb.from('rechnungen').select('*, kunden(name, adresse)').eq('id', rId).single();
+  if (!r) { toast('Rechnung nicht gefunden.', true); return; }
+
+  // Bestellungen des Monats für diesen Kunden laden
+  const { data: bestellungen } = await sb.from('bestellungen')
+    .select('*, lieferwochen(woche_von, woche_bis), bestellpositionen(menge, preis_netto, gesamt_netto, produkte(name, einheit))')
+    .eq('kunde_id', r.kunde_id)
+    .eq('status', 'geliefert');
+
+  const zeilen = [['Rechnungsnr.', 'Kunde', 'Adresse', 'Monat/Jahr', 'Lieferwoche', 'Produkt', 'Einheit', 'Menge', 'Preis netto', 'Gesamt netto', 'Rechnungsstatus']];
+
+  (bestellungen || []).forEach(b => {
+    const bd = new Date(b.erstellt_am);
+    if (bd.getMonth() + 1 === r.monat && bd.getFullYear() === r.jahr) {
+      (b.bestellpositionen || []).forEach(p => {
+        zeilen.push([
+          r.nummer,
+          r.kunden?.name || '',
+          r.kunden?.adresse || '',
+          r.monat + '/' + r.jahr,
+          wochenLabel(b.lieferwochen),
+          p.produkte?.name || '',
+          p.produkte?.einheit || '',
+          p.menge,
+          p.preis_netto,
+          p.gesamt_netto,
+          r.status
+        ]);
+      });
+    }
+  });
+
+  if (zeilen.length === 1) {
+    // Fallback: nur Rechnungskopf
+    zeilen.push([r.nummer, r.kunden?.name, r.kunden?.adresse || '', r.monat+'/'+r.jahr, '', '', '', '', '', r.gesamt_netto, r.status]);
+  }
+
+  const csv = zeilen.map(row => row.map(v => '"' + String(v||'').replace(/"/g, '""') + '"').join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'rechnung_'+r.nummer+'.csv';
+  link.download = 'Rechnung_' + r.nummer + '_' + r.kunden?.name?.replace(/\s/g,'_') + '.csv';
   link.click();
+  toast('CSV exportiert.');
 }
 
 // ── LIEFERSCHEIN DRUCKEN ───────────────────────────────────────
@@ -2061,6 +2118,79 @@ function kundeBearbeitenAusDetail() {
   if (!kundeDetailAktuelleId) return;
   modalSchliessen('kunde-detail-modal');
   kundeBearbeiten(kundeDetailAktuelleId);
+}
+
+
+async function rechnungPdfDrucken(rId) {
+  const { data: r } = await sb.from('rechnungen').select('*, kunden(name, adresse, email, telefon)').eq('id', rId).single();
+  if (!r) return;
+
+  const { data: bestellungen } = await sb.from('bestellungen')
+    .select('*, lieferwochen(woche_von, woche_bis), bestellpositionen(menge, preis_netto, gesamt_netto, produkte(name, einheit))')
+    .eq('kunde_id', r.kunde_id)
+    .eq('status', 'geliefert');
+
+  let positionen = '';
+  let gesamt = 0;
+  (bestellungen || []).forEach(b => {
+    const bd = new Date(b.erstellt_am);
+    if (bd.getMonth() + 1 === r.monat && bd.getFullYear() === r.jahr) {
+      positionen += `<tr style="background:#f8f9f8"><td colspan="4" style="padding:6px 8px;font-weight:600;font-size:12px;color:#2d6a4f;">Lieferung: ${wochenLabel(b.lieferwochen)}</td></tr>`;
+      (b.bestellpositionen || []).forEach(p => {
+        gesamt += parseFloat(p.gesamt_netto);
+        positionen += `<tr>
+          <td style="padding:6px 8px;">${p.produkte?.name}</td>
+          <td style="padding:6px 8px;text-align:center;">${p.menge} ${p.produkte?.einheit}</td>
+          <td style="padding:6px 8px;text-align:right;">${euro(p.preis_netto)}</td>
+          <td style="padding:6px 8px;text-align:right;font-weight:600;">${euro(p.gesamt_netto)}</td>
+        </tr>`;
+      });
+    }
+  });
+
+  const html = `<html><head><title>Rechnung ${r.nummer}</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 40px; max-width: 750px; margin: 0 auto; color: #1a2e1a; }
+    .kopf { display: flex; justify-content: space-between; margin-bottom: 32px; }
+    .firma { font-size: 22px; font-weight: 800; color: #2d6a4f; }
+    .rechnung-nr { font-size: 18px; font-weight: 700; color: #2d6a4f; text-align: right; }
+    .adress-block { margin-bottom: 28px; }
+    .adress-block strong { display: block; font-size: 15px; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th { background: #d8f3dc; color: #2d6a4f; padding: 9px 8px; text-align: left; font-size: 13px; }
+    td { border-bottom: 1px solid #eee; font-size: 13px; vertical-align: middle; }
+    .gesamt-zeile { font-size: 18px; font-weight: 800; color: #2d6a4f; text-align: right; margin-top: 20px; padding-top: 12px; border-top: 2px solid #2d6a4f; }
+    .footer { margin-top: 40px; font-size: 11px; color: #999; border-top: 1px solid #eee; padding-top: 12px; }
+  </style></head><body>
+  <div class="kopf">
+    <div><div class="firma">🌿 Hütterberg</div><div style="font-size:13px;color:#666;margin-top:4px;">Landwirtschaftlicher Betrieb</div></div>
+    <div><div class="rechnung-nr">Rechnung ${r.nummer}</div><div style="font-size:13px;color:#666;text-align:right;margin-top:4px;">Datum: ${datum(new Date().toISOString())}</div></div>
+  </div>
+  <div class="adress-block">
+    <strong>Rechnungsempfänger:</strong>
+    ${r.kunden?.name || ''}<br>
+    ${r.kunden?.adresse || ''}<br>
+    ${r.kunden?.email || ''}
+  </div>
+  <div style="background:#f0faf3;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;">
+    <strong>Abrechnungszeitraum:</strong> ${r.monat}/${r.jahr} &nbsp;|&nbsp;
+    <strong>Status:</strong> ${r.status}
+  </div>
+  <table>
+    <thead><tr><th>Produkt</th><th style="text-align:center">Menge</th><th style="text-align:right">Einzelpreis</th><th style="text-align:right">Gesamt</th></tr></thead>
+    <tbody>${positionen || '<tr><td colspan="4" style="padding:12px;text-align:center;color:#999;">Keine Positionen gefunden</td></tr>'}</tbody>
+  </table>
+  <div class="gesamt-zeile">Gesamtsumme netto: ${euro(r.gesamt_netto)}</div>
+  <div class="footer">
+    Pauschalierter Betrieb – kein Steuerausweis gemäß § 22 UStG<br>
+    Bitte überweisen Sie den Betrag innerhalb von 14 Tagen.
+  </div>
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => win.print(), 500);
 }
 
 // ── START ──────────────────────────────────────────────────────
