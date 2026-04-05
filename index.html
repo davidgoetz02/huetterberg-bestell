@@ -226,7 +226,6 @@ tr:last-child td { border-bottom: none; }
     <button class="tab-btn" onclick="tabWechseln('kunden', this)">👥 Kunden</button>
     <button class="tab-btn" onclick="tabWechseln('lieferwochen', this)">📅 Lieferwochen</button>
     <button class="tab-btn" onclick="tabWechseln('rechnungen', this)">🧾 Rechnungen</button>
-    <button class="tab-btn" onclick="tabWechseln('kanban', this)">📋 Kanban</button>
   </div>
 
   <div class="haupt">
@@ -277,6 +276,19 @@ tr:last-child td { border-bottom: none; }
               <tr><td colspan="6" style="text-align:center; color:var(--grau); padding:24px;">Wird geladen…</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- KANBAN BOARD direkt darunter -->
+      <div class="karte" style="margin-top:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+          <div class="karte-titel" style="margin:0">📋 Kanban-Übersicht</div>
+          <select id="kanban-woche-filter" onchange="kanbanLaden()" style="padding:7px 12px;border:1.5px solid var(--grau-border);border-radius:7px;">
+            <option value="">Alle Wochen</option>
+          </select>
+        </div>
+        <div class="kanban-board" id="kanban-board">
+          <div class="leer-zustand"><div class="icon">⏳</div><p>Wird geladen…</p></div>
         </div>
       </div>
     </div>
@@ -697,13 +709,12 @@ function tabWechseln(id, btn) {
   container.querySelectorAll('.tab-inhalt').forEach(t => t.classList.remove('aktiv'));
   btn.classList.add('aktiv');
   document.getElementById('tab-' + id).classList.add('aktiv');
-  if (id === 'bestellungen') bestellungenLaden();
+  if (id === 'bestellungen') { bestellungenLaden(); kanbanLaden(); }
   if (id === 'produkte') produkteLaden();
   if (id === 'kunden') kundenLaden();
   if (id === 'lieferwochen') wochenLaden();
   if (id === 'rechnungen') rechnungenLaden();
   if (id === 'uebersicht') uebersichtLaden();
-  if (id === 'kanban') kanbanLaden();
   if (id === 'meine-bestellungen') meineBestellungenLaden();
 }
 function modalOeffnen(id) {
@@ -1134,6 +1145,8 @@ async function wocheSpeichern() {
 
 // ── ADMIN: BESTELLUNGEN ────────────────────────────────────────
 async function bestellungenLaden() {
+  // Kanban asynchron mitladen
+  setTimeout(() => kanbanLaden(), 100);
   const wocheFilter = document.getElementById('filter-woche').value;
   const statusFilter = document.getElementById('filter-status').value;
   let query = sb.from('bestellungen').select('*, kunden(name), lieferwochen(woche_von, woche_bis)').order('erstellt_am', { ascending: false });
@@ -1169,6 +1182,7 @@ async function bestellungStatusAendern(id, status) {
   if (error) { toast('Fehler beim Aktualisieren.', true); return; }
   toast('Status aktualisiert.');
   if (document.getElementById('tab-uebersicht').classList.contains('aktiv')) uebersichtLaden();
+  if (document.getElementById('tab-bestellungen').classList.contains('aktiv')) kanbanLaden();
 }
 
 // ── ADMIN: BESTELLUNG ERFASSEN (TELEFON) ───────────────────────
@@ -1825,6 +1839,10 @@ async function bestellungStornierenMitBestaetigung(bestellungId) {
 
 // ── KANBAN BOARD ───────────────────────────────────────────────
 async function kanbanLaden() {
+  // Wochen laden falls noch nicht vorhanden
+  if (!alleWochen || alleWochen.length === 0) {
+    await wochenImHintergrundLaden();
+  }
   const wocheFilter = document.getElementById('kanban-woche-filter')?.value || '';
   let query = sb.from('bestellungen')
     .select('*, kunden(name), lieferwochen(woche_von, woche_bis)')
@@ -1882,11 +1900,14 @@ async function kanbanLaden() {
 
   // Wochenfilter befüllen
   const kf = document.getElementById('kanban-woche-filter');
-  if (kf && alleWochen.length > 0 && kf.options.length <= 1) {
+  if (kf) {
+    const aktWert = kf.value;
+    kf.innerHTML = '<option value="">Alle Wochen</option>';
     alleWochen.forEach(w => {
       const opt = document.createElement('option');
       opt.value = w.id;
       opt.textContent = wochenLabel(w);
+      if (w.id === aktWert) opt.selected = true;
       kf.appendChild(opt);
     });
   }
